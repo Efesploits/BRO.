@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BRO.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500;800&family=Space+Grotesk:wght@300;400;500;700&family=Pacifico&family=Press+Start+2P&family=Playfair+Display:ital,wght@1,600&family=Monoton&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#060607; --bg2:#0d0d10;
+  --glass:rgba(255,255,255,.055); --glass-hi:rgba(255,255,255,.10);
+  --stroke:rgba(255,255,255,.13); --stroke-hi:rgba(255,255,255,.28);
+  --ink:#f4f4f5; --ink-dim:rgba(244,244,245,.55); --ink-faint:rgba(244,244,245,.32);
+  --accent:#ffffff; --online:#3ddc84; --idle:#f0b232;
+  --radius:22px; --font-body:'Space Grotesk',sans-serif; --font-disp:'Unbounded',sans-serif;
+  --glow:0 0 40px rgba(255,255,255,.06);
+}
+body.tuna{
+  --bg:#fdeef6; --bg2:#ffe3f0;
+  --glass:rgba(255,255,255,.55); --glass-hi:rgba(255,255,255,.8);
+  --stroke:rgba(255,122,184,.35); --stroke-hi:rgba(255,80,160,.6);
+  --ink:#4a1f35; --ink-dim:rgba(74,31,53,.6); --ink-faint:rgba(74,31,53,.35);
+  --accent:#ff5fa8; --online:#2fc46f;
+  --glow:0 8px 40px rgba(255,95,168,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  overflow-x:hidden; min-height:100vh; transition:background .8s;
+}
+/* ambient blobs */
+.blob{position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;pointer-events:none;z-index:0;transition:background 1s}
+.b1{width:520px;height:520px;top:-160px;left:-120px;background:rgba(255,255,255,.05);animation:drift 22s ease-in-out infinite alternate}
+.b2{width:420px;height:420px;bottom:-140px;right:-100px;background:rgba(255,255,255,.04);animation:drift 28s ease-in-out infinite alternate-reverse}
+body.tuna .b1{background:rgba(255,95,168,.28)}
+body.tuna .b2{background:rgba(255,170,60,.18)}
+@keyframes drift{to{transform:translate(60px,40px) scale(1.15)}}
+
+.wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:24px 20px 80px}
+
+/* ---------- glass base ---------- */
+.glass{
+  background:var(--glass); border:1px solid var(--stroke); border-radius:var(--radius);
+  backdrop-filter:blur(22px) saturate(1.5); -webkit-backdrop-filter:blur(22px) saturate(1.5);
+  box-shadow:var(--glow), inset 0 1px 0 rgba(255,255,255,.09);
+  transition:border-color .3s, transform .3s, background .6s;
+}
+.glass:hover{border-color:var(--stroke-hi)}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;margin-bottom:26px;position:sticky;top:14px;z-index:50}
+.logo{font-family:var(--font-disp);font-weight:800;font-size:1.5rem;letter-spacing:.05em;user-select:none}
+.logo .dot{color:var(--accent)}
+body.tuna .logo::after{content:" 💗";font-size:1.1rem}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+.tab{
+  border:1px solid transparent;background:transparent;color:var(--ink-dim);
+  font-family:var(--font-body);font-size:.85rem;font-weight:500;letter-spacing:.03em;
+  padding:8px 16px;border-radius:999px;cursor:pointer;transition:.25s;
+}
+.tab:hover{color:var(--ink)}
+.tab.active{background:var(--glass-hi);border-color:var(--stroke);color:var(--ink)}
+.me-chip{display:flex;align-items:center;gap:10px;font-size:.85rem;cursor:pointer}
+.me-chip .ava{width:32px;height:32px;font-size:.8rem}
+
+/* ---------- sections ---------- */
+.page{display:none;animation:fadein .4s}
+.page.show{display:block}
+@keyframes fadein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+h2.sec{font-family:var(--font-disp);font-weight:500;font-size:1.05rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin:6px 4px 18px}
+
+/* ---------- login ---------- */
+#login{max-width:430px;margin:9vh auto 0;padding:38px 34px;text-align:center}
+#login h1{font-family:var(--font-disp);font-weight:800;font-size:2.6rem;margin-bottom:6px}
+#login p{color:var(--ink-dim);font-size:.9rem;margin-bottom:26px}
+.field{width:100%;background:rgba(0,0,0,.25);border:1px solid var(--stroke);border-radius:14px;color:var(--ink);
+  font-family:var(--font-body);font-size:.95rem;padding:13px 16px;outline:none;transition:.25s;margin-bottom:14px}
+body.tuna .field{background:rgba(255,255,255,.6)}
+.field:focus{border-color:var(--stroke-hi)}
+.rolepick{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:6px 0 20px}
+.rp{padding:7px 14px;border-radius:999px;border:1px solid var(--stroke);color:var(--ink-dim);font-size:.8rem;cursor:pointer;transition:.2s;user-select:none}
+.rp.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+body.tuna .rp.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;border:none;cursor:pointer;
+  background:var(--ink);color:var(--bg);font-family:var(--font-body);font-weight:700;
+  font-size:.92rem;padding:13px 26px;border-radius:14px;transition:.25s;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(255,255,255,.15)}
+body.tuna .btn{background:var(--accent);color:#fff}
+body.tuna .btn:hover{box-shadow:0 10px 30px rgba(255,95,168,.4)}
+.btn.ghost{background:transparent;color:var(--ink-dim);border:1px solid var(--stroke);font-weight:500}
+.btn.ghost:hover{color:var(--ink);box-shadow:none}
+.hint{font-size:.75rem;color:var(--ink-faint);margin-top:16px}
+
+/* ---------- member cards ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.card{position:relative;padding:20px;overflow:hidden}
+.card .ptc{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:var(--radius)}
+.mrow{display:flex;align-items:center;gap:14px}
+.ava{
+  width:52px;height:52px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-disp);font-weight:800;font-size:1.15rem;
+  background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.04));
+  border:1px solid var(--stroke-hi);position:relative;
+}
+body.tuna .ava{background:linear-gradient(135deg,#ffc2dd,#ffe3f0)}
+.status{position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-radius:50%;border:3px solid var(--bg2);background:#5f6368}
+.status.online{background:var(--online);animation:pulse 1.6s ease-in-out infinite}
+.status.idle{background:var(--idle)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(61,220,132,.55);opacity:1}50%{box-shadow:0 0 0 7px rgba(61,220,132,0);opacity:.55}}
+.uname{font-weight:700;font-size:1.02rem;line-height:1.2;word-break:break-all}
+.uname.grad{background-clip:text;-webkit-background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.roles{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.badge{font-size:.62rem;letter-spacing:.09em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--stroke);color:var(--ink-dim)}
+.badge.admin{border-color:var(--stroke-hi);color:var(--ink)}
+.activity{margin-top:14px;padding:11px 13px;border-radius:14px;background:rgba(0,0,0,.22);border:1px solid var(--stroke);font-size:.8rem;display:flex;gap:10px;align-items:center}
+body.tuna .activity{background:rgba(255,255,255,.55)}
+.activity .ic{font-size:1.05rem}
+.activity .t1{font-weight:600}
+.activity .t2{color:var(--ink-dim);font-size:.72rem}
+.eq{display:inline-flex;gap:2px;align-items:flex-end;height:12px;margin-left:auto}
+.eq i{width:3px;background:var(--online);border-radius:2px;animation:eq 0.9s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}
+@keyframes eq{0%,100%{height:4px}50%{height:12px}}
+.offline-note{margin-top:14px;font-size:.78rem;color:var(--ink-faint)}
+
+/* particles */
+.p{position:absolute;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.85);pointer-events:none;animation:rise linear forwards}
+body.tuna .p{background:#ff8fc2}
+body.tuna .p.heart{background:none;font-size:9px}
+@keyframes rise{
+  0%{transform:translateY(0) scale(1);opacity:0}
+  15%{opacity:.9}
+  100%{transform:translateY(-70px) translateX(var(--dx,0)) scale(.2);opacity:0}
+}
+
+/* ---------- todo ---------- */
+.subtabs{display:flex;gap:8px;margin-bottom:18px}
+.todo-item{display:flex;align-items:center;gap:14px;padding:15px 18px;margin-bottom:10px;position:relative;overflow:hidden}
+.chk{width:22px;height:22px;flex:none;border-radius:8px;border:1.5px solid var(--stroke-hi);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;transition:.2s;background:transparent;color:transparent}
+.chk.done{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+body.tuna .chk.done{background:var(--accent);border-color:var(--accent);color:#fff}
+.chk.locked{cursor:default;opacity:.6}
+.todo-txt{flex:1;font-size:.93rem}
+.todo-item.done .todo-txt{text-decoration:line-through;color:var(--ink-faint)}
+.tags{display:flex;gap:5px;flex-wrap:wrap}
+.tag{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--glass-hi);border:1px solid var(--stroke);color:var(--ink-dim)}
+.tag.mine{border-color:var(--stroke-hi);color:var(--ink)}
+.addrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;padding:16px 18px}
+.addrow .field{flex:1;min-width:200px;margin:0}
+.empty{padding:34px;text-align:center;color:var(--ink-faint);font-size:.88rem}
+
+/* burn effect */
+.todo-item.burning{animation:burnshake .9s ease-in forwards}
+.todo-item.burning::after{
+  content:"";position:absolute;inset:-4px;border-radius:inherit;
+  background:linear-gradient(0deg,#ff6a00,#ffb300 40%,transparent 75%);
+  mix-blend-mode:screen;animation:burnup .9s ease-in forwards;
+}
+body.tuna .todo-item.burning::after{background:linear-gradient(0deg,#ff5fa8,#ffc2dd 40%,transparent 75%)}
+@keyframes burnup{0%{transform:translateY(100%);opacity:0}25%{opacity:1}100%{transform:translateY(-15%);opacity:1}}
+@keyframes burnshake{
+  0%{clip-path:inset(0 0 0 0)}
+  60%{transform:translateX(2px);clip-path:inset(0 0 0 0);filter:brightness(1.6) contrast(1.2)}
+  100%{transform:translateY(-14px) scale(.92);opacity:0;filter:brightness(3) blur(4px);clip-path:inset(0 0 100% 0)}
+}
+.ember{position:fixed;width:5px;height:5px;border-radius:50%;background:#ffae42;pointer-events:none;z-index:999;animation:emberfly .9s ease-out forwards}
+body.tuna .ember{background:#ff7ab8}
+@keyframes emberfly{to{transform:translate(var(--ex),var(--ey)) scale(0);opacity:0}}
+
+/* ---------- announcements ---------- */
+.ann{padding:20px 22px;margin-bottom:14px}
+.ann .head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ann .who{font-weight:700;font-size:.9rem}
+.ann .when{font-size:.7rem;color:var(--ink-faint);margin-left:auto}
+.ann .body{font-size:.92rem;line-height:1.55;color:var(--ink-dim)}
+.ann .megaphone{font-size:1.1rem}
+textarea.field{resize:vertical;min-height:80px}
+
+/* ---------- profile ---------- */
+.prof{padding:26px;max-width:560px}
+.frow{margin-bottom:20px}
+.frow label{display:block;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px}
+select.field{appearance:none}
+.colorrow{display:flex;gap:12px;align-items:center}
+input[type=color]{width:44px;height:44px;border-radius:12px;border:1px solid var(--stroke);background:transparent;cursor:pointer;padding:3px}
+.preview{margin-top:8px;padding:22px;text-align:center;font-size:1.7rem}
+.seg{display:inline-flex;border:1px solid var(--stroke);border-radius:999px;overflow:hidden}
+.seg button{background:transparent;border:none;color:var(--ink-dim);padding:8px 18px;font-family:var(--font-body);font-size:.82rem;cursor:pointer}
+.seg button.on{background:var(--ink);color:var(--bg)}
+body.tuna .seg button.on{background:var(--accent);color:#fff}
+
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(80px);padding:12px 22px;border-radius:14px;font-size:.85rem;z-index:1000;opacity:0;transition:.35s}
+.toast.show{transform:translateX(-50%);opacity:1}
+
+/* tuna sparkles */
+.tunafall{position:fixed;top:-30px;z-index:0;pointer-events:none;font-size:16px;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(360deg);opacity:.2}}
+
+@media(max-width:640px){
+  header{flex-direction:column;gap:12px;position:static}
+  .wrap{padding:16px 12px 60px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001s !important;transition-duration:.001s !important}
+}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div>
+
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="login" class="glass">
+    <h1>BRO<span class="dot">.</span></h1>
+    <p>Ekibin cam panosu — giriş yap, ne döndüğünü gör.</p>
+    <input id="l-user" class="field" placeholder="Discord kullanıcı adın" maxlength="24" autocomplete="off">
+    <div class="rolepick" id="l-roles">
+      <span class="rp" data-r="animator">animator</span>
+      <span class="rp" data-r="scripter">scripter</span>
+      <span class="rp" data-r="sfx">sfx</span>
+      <span class="rp" data-r="vfx">vfx</span>
+      <span class="rp" data-r="arkadas">arkadaş</span>
+    </div>
+    <button class="btn" id="l-discord" style="width:100%;justify-content:center;margin-bottom:10px">⌁ Discord ile Giriş</button>
+    <button class="btn ghost" id="l-go" style="width:100%;justify-content:center">Demo giriş (kullanıcı adıyla)</button>
+    <div class="hint" id="l-hint">Admin rolü seçilemez — sadece belirli Discord hesaplarına otomatik verilir.</div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" style="display:none">
+    <header class="glass">
+      <div class="logo">BRO<span class="dot">.</span></div>
+      <nav>
+        <button class="tab active" data-p="home">Ana Sayfa</button>
+        <button class="tab" data-p="todo">To-Do</button>
+        <button class="tab" data-p="ann">Duyurular</button>
+        <button class="tab" data-p="prof">Profil</button>
+      </nav>
+      <div class="me-chip" id="me-chip" title="Çıkış yap"></div>
+    </header>
+
+    <!-- HOME -->
+    <section class="page show" id="p-home">
+      <h2 class="sec">Ekip · şu an neler oluyor</h2>
+      <div class="grid" id="members"></div>
+    </section>
+
+    <!-- TODO -->
+    <section class="page" id="p-todo">
+      <h2 class="sec">Görevler</h2>
+      <div class="subtabs">
+        <button class="tab active" data-t="genel">Genel</button>
+        <button class="tab" data-t="kisisel">Bana Özel</button>
+      </div>
+      <div id="todo-list"></div>
+      <div class="addrow glass" id="todo-add">
+        <input class="field" id="t-text" placeholder="Yeni görev…" maxlength="90">
+        <div class="rolepick" style="margin:0" id="t-tags">
+          <span class="rp" data-r="animation">animation</span>
+          <span class="rp" data-r="script">script</span>
+          <span class="rp" data-r="sfx">sfx</span>
+          <span class="rp" data-r="vfx">vfx</span>
+        </div>
+        <button class="btn" id="t-go">Ekle</button>
+      </div>
+    </section>
+
+    <!-- ANNOUNCEMENTS -->
+    <section class="page" id="p-ann">
+      <h2 class="sec">Duyurular</h2>
+      <div id="ann-composer" class="glass addrow" style="display:none;flex-direction:column;align-items:stretch">
+        <textarea class="field" id="a-text" placeholder="Ekibe duyur…" maxlength="500"></textarea>
+        <button class="btn" id="a-go" style="align-self:flex-end">📣 Yayınla</button>
+      </div>
+      <div id="ann-list" style="margin-top:14px"></div>
+    </section>
+
+    <!-- PROFILE -->
+    <section class="page" id="p-prof">
+      <h2 class="sec">Profil · kullanıcı adı stilin</h2>
+      <div class="prof glass">
+        <div class="frow">
+          <label>Font</label>
+          <select class="field" id="pf-font">
+            <option value="'Space Grotesk',sans-serif">Space Grotesk — temiz</option>
+            <option value="'Unbounded',sans-serif">Unbounded — kalın & fütüristik</option>
+            <option value="'Pacifico',cursive">Pacifico — akışkan</option>
+            <option value="'Press Start 2P',monospace">Press Start 2P — retro pixel</option>
+            <option value="'Playfair Display',serif">Playfair Italic — zarif</option>
+            <option value="'Monoton',cursive">Monoton — neon</option>
+            <option value="'Caveat',cursive">Caveat — el yazısı</option>
+          </select>
+        </div>
+        <div class="frow">
+          <label>Renk modu</label>
+          <div class="seg" id="pf-mode">
+            <button data-m="static" class="on">Statik</button>
+            <button data-m="gradient">Gradient</button>
+          </div>
+        </div>
+        <div class="frow colorrow">
+          <div><label>Renk 1</label><input type="color" id="pf-c1" value="#ffffff"></div>
+          <div id="c2wrap" style="display:none"><label>Renk 2</label><input type="color" id="pf-c2" value="#888888"></div>
+        </div>
+        <div class="preview glass"><span id="pf-preview" class="uname">önizleme</span></div>
+        <button class="btn" id="pf-save" style="margin-top:18px">Kaydet</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="toast glass" id="toast"></div>
+<script>
+/* ================= BRO. app logic ================= */
+/* ====== DISCORD KURULUMU ======
+   1) discord.com/developers/applications → New Application
+   2) OAuth2 → Redirects kısmına bu sitenin tam URL'sini ekle
+   3) Client ID'yi aşağıya yapıştır. Boş bırakırsan demo giriş çalışır.
+   Aktivite verisi için üyeler discord.gg/lanyard sunucusuna katılmalı
+   (Lanyard, Discord durumunu API'ye açan ücretsiz bir servistir).      */
+const DISCORD_CLIENT_ID="1527464957757620244";
+const REDIRECT_URI=location.origin+location.pathname;
+const ADMINS=['m3fxn','tunaneymar_'];   // sadece bu Discord kullanıcı adları admin olur
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
+const TAG2ROLE={animation:'animator',script:'scripter',sfx:'sfx',vfx:'vfx'};
+
+let state={me:null,members:[],todos:[],anns:[]};
+let memFallback={}; // in-memory fallback if storage unavailable
+
+/* ---------- storage (shared, with fallback) ---------- */
+async function sGet(k,def){
+  try{const r=await window.storage.get(k,true);return r?JSON.parse(r.value):def}
+  catch(e){return k in memFallback?memFallback[k]:def}
+}
+async function sSet(k,v){
+  memFallback[k]=v;
+  try{await window.storage.set(k,JSON.stringify(v),true)}catch(e){}
+}
+
+/* ---------- seed data ---------- */
+const SEED_MEMBERS=[
+  {name:'Mira',roles:['animator'],status:'online',act:{type:'music',t1:'Blinding Lights',t2:'The Weeknd · Spotify',ic:'🎧'},style:{font:"'Pacifico',cursive",mode:'static',c1:'#f4f4f5'}},
+  {name:'Efe',roles:['sfx','arkadas'],status:'idle',act:{type:'game',t1:'FL Studio',t2:'ses tasarımı',ic:'🎛️'},style:{font:"'Press Start 2P',monospace",mode:'static',c1:'#f4f4f5'}},
+];
+const SEED_TODOS=[];
+const SEED_ANNS=[];
+
+/* ---------- boot ---------- */
+async function boot(){
+  state.members=await sGet('bro:members',null)||SEED_MEMBERS;
+  state.todos=await sGet('bro:todos',null)||SEED_TODOS;
+  state.anns=await sGet('bro:anns',null)||SEED_ANNS;
+  await sSet('bro:members',state.members);
+  await sSet('bro:todos',state.todos);
+  await sSet('bro:anns',state.anns);
+}
+boot();
+
+/* ---------- login ---------- */
+let pickedRoles=new Set();
+$('#l-roles').addEventListener('click',e=>{
+  const el=e.target.closest('.rp'); if(!el)return;
+  const r=el.dataset.r;
+  el.classList.toggle('on'); el.classList.contains('on')?pickedRoles.add(r):pickedRoles.delete(r);
+});
+async function loginAs(name,discordId){
+  await boot();
+  let m=state.members.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!m){
+    if(pickedRoles.size===0)pickedRoles.add('arkadas');
+    m={name,discordId:discordId||null,roles:[...pickedRoles],status:'online',
+       act:discordId?null:{type:'game',t1:'BRO. panosu',t2:'yeni katıldı',ic:'✨'},
+       style:{font:"'Space Grotesk',sans-serif",mode:'static',c1:'#ffffff'}};
+    state.members.push(m);
+  }else{
+    m.status='online';
+    if(discordId)m.discordId=discordId;
+  }
+  /* admin sadece izin verilen hesaplara — kimse kendine seçemez */
+  m.roles=m.roles.filter(r=>r!=='admin');
+  if(ADMINS.includes(name.toLowerCase()))m.roles.unshift('admin');
+  await sSet('bro:members',state.members);
+  state.me=m;
+  applyTuna(name);
+  $('#login').style.display='none'; $('#app').style.display='block';
+  renderAll(); startParticles(); startPresencePolling();
+  toast(isTuna()?'Hoş geldin Tuna! 🌸💗':'Hoş geldin, '+m.name+'!');
+}
+
+/* demo giriş */
+$('#l-go').addEventListener('click',()=>{
+  const name=$('#l-user').value.trim();
+  if(!name){toast('Kullanıcı adı lazım, bro.');return}
+  loginAs(name,null);
+});
+$('#l-user').addEventListener('keydown',e=>{if(e.key==='Enter')$('#l-go').click()});
+
+/* gerçek Discord OAuth (implicit flow — backend gerektirmez) */
+$('#l-discord').addEventListener('click',()=>{
+  if(!DISCORD_CLIENT_ID){
+    toast('Discord Client ID ayarlanmamış — dosyanın başındaki kurulum notuna bak.');
+    $('#l-hint').innerHTML='Gerçek Discord girişi için dosyadaki <b>DISCORD_CLIENT_ID</b> alanını doldur.<br>Şimdilik demo girişi kullanabilirsin.';
+    return;
+  }
+  const u=new URL('https://discord.com/oauth2/authorize');
+  u.searchParams.set('client_id',DISCORD_CLIENT_ID);
+  u.searchParams.set('redirect_uri',REDIRECT_URI);
+  u.searchParams.set('response_type','token');
+  u.searchParams.set('scope','identify');
+  location.href=u.toString();
+});
+
+/* OAuth dönüşünü yakala (#access_token=...) */
+(async function handleOAuthReturn(){
+  const h=new URLSearchParams(location.hash.slice(1));
+  const tok=h.get('access_token');
+  if(!tok)return;
+  history.replaceState(null,'',location.pathname); // token'ı URL'den temizle
+  try{
+    const r=await fetch('https://discord.com/api/users/@me',{headers:{Authorization:'Bearer '+tok}});
+    if(!r.ok)throw 0;
+    const u=await r.json();
+    await loginAs(u.username,u.id);
+    refreshPresence(); // Lanyard'dan gerçek aktiviteyi çek
+  }catch(e){toast('Discord girişi başarısız oldu, tekrar dene.')}
+})();
+
+/* ---------- gerçek aktivite: Lanyard ---------- */
+async function refreshPresence(){
+  const targets=state.members.filter(m=>m.discordId);
+  for(const m of targets){
+    try{
+      const r=await fetch('https://api.lanyard.rest/v1/users/'+m.discordId);
+      if(!r.ok)continue;
+      const d=(await r.json()).data;
+      m.status=d.discord_status==='dnd'?'idle':(d.discord_status||'offline');
+      if(m.status!=='online'&&m.status!=='idle'&&m.status!=='offline')m.status='online';
+      if(d.spotify){
+        m.act={type:'music',t1:d.spotify.song,t2:d.spotify.artist+' · Spotify',ic:'🎧'};
+      }else{
+        const g=(d.activities||[]).find(a=>a.type===0);
+        m.act=g?{type:'game',t1:g.name,t2:g.details||g.state||'oyunda',ic:'🎮'}:null;
+      }
+    }catch(e){/* Lanyard'a kayıtlı değil veya ağ engelli — sessizce geç */}
+  }
+  await sSet('bro:members',state.members);
+  if(state.me)renderMembers();
+}
+function startPresencePolling(){
+  if(window._presInt)clearInterval(window._presInt);
+  refreshPresence();
+  window._presInt=setInterval(refreshPresence,30000);
+}
+
+const TUNA=n=>['tuna','tunaneymar_'].includes(n.toLowerCase());
+function isTuna(){return state.me&&TUNA(state.me.name)}
+function applyTuna(name){
+  const on=TUNA(name);
+  document.body.classList.toggle('tuna',on);
+  if(on){tunaRain();}
+}
+function tunaRain(){
+  if(window._tunaInt)return;
+  const emo=['🌸','💗','🎀','✨','🧁','🍓'];
+  window._tunaInt=setInterval(()=>{
+    if(!document.body.classList.contains('tuna'))return;
+    const s=document.createElement('span');
+    s.className='tunafall'; s.textContent=emo[Math.random()*emo.length|0];
+    s.style.left=Math.random()*100+'vw';
+    s.style.animationDuration=(5+Math.random()*6)+'s';
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),11500);
+  },900);
+}
+
+/* ---------- nav ---------- */
+$$('nav .tab').forEach(b=>b.addEventListener('click',()=>{
+  $$('nav .tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  $$('.page').forEach(p=>p.classList.remove('show'));
+  $('#p-'+b.dataset.p).classList.add('show');
+}));
+$('#me-chip').addEventListener('click',()=>location.reload());
+
+/* ---------- render helpers ---------- */
+function styleName(el,m){
+  el.style.fontFamily=m.style.font;
+  if(m.style.mode==='gradient'){
+    el.classList.add('grad');
+    el.style.backgroundImage=`linear-gradient(90deg,${m.style.c1},${m.style.c2||m.style.c1})`;
+    el.style.color='';
+  }else{
+    el.classList.remove('grad');
+    el.style.backgroundImage=''; el.style.color=m.style.c1;
+    el.style.webkitTextFillColor=m.style.c1;
+  }
+}
+
+function renderAll(){renderMembers();renderMeChip();renderTodos();renderAnns();initProfile();}
+
+function renderMeChip(){
+  const c=$('#me-chip'); c.innerHTML='';
+  const a=document.createElement('div');a.className='ava';a.textContent=state.me.name[0].toUpperCase();
+  const s=document.createElement('span');s.className='uname';s.textContent=state.me.name;styleName(s,state.me);
+  c.append(a,s);
+}
+
+/* ---------- members ---------- */
+function renderMembers(){
+  const g=$('#members'); g.innerHTML='';
+  const order={online:0,idle:1,offline:2};
+  [...state.members].sort((a,b)=>order[a.status]-order[b.status]).forEach(m=>{
+    const card=document.createElement('div'); card.className='card glass'; card.dataset.status=m.status;
+    const ptc=document.createElement('div'); ptc.className='ptc';
+    const row=document.createElement('div'); row.className='mrow';
+    const ava=document.createElement('div'); ava.className='ava'; ava.textContent=m.name[0].toUpperCase();
+    const st=document.createElement('span'); st.className='status '+m.status; ava.appendChild(st);
+    const info=document.createElement('div');
+    const un=document.createElement('div'); un.className='uname'; un.textContent=m.name; styleName(un,m);
+    const rl=document.createElement('div'); rl.className='roles';
+    m.roles.forEach(r=>{const b=document.createElement('span');b.className='badge'+(r==='admin'?' admin':'');b.textContent=r==='arkadas'?'arkadaş':r;rl.appendChild(b)});
+    info.append(un,rl); row.append(ava,info); card.append(ptc,row);
+    if(m.status!=='offline'&&m.act){
+      const act=document.createElement('div'); act.className='activity';
+      act.innerHTML=`<span class="ic">${m.act.ic}</span><div><div class="t1">${esc(m.act.t1)}</div><div class="t2">${m.act.type==='music'?'🎵 dinliyor · ':'oynuyor · '}${esc(m.act.t2)}</div></div>`;
+      if(m.act.type==='music'){const eq=document.createElement('span');eq.className='eq';eq.innerHTML='<i></i><i></i><i></i>';act.appendChild(eq)}
+      card.appendChild(act);
+    }else if(m.status==='offline'){
+      const off=document.createElement('div'); off.className='offline-note'; off.textContent='Çevrimdışı · en son bugün görüldü'; card.appendChild(off);
+    }
+    g.appendChild(card);
+  });
+}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+/* particles around online members */
+function startParticles(){
+  if(window._pInt)clearInterval(window._pInt);
+  window._pInt=setInterval(()=>{
+    $$('.card[data-status="online"] .ptc').forEach(zone=>{
+      if(Math.random()<.55){
+        const p=document.createElement('span');
+        const heart=document.body.classList.contains('tuna')&&Math.random()<.4;
+        p.className='p'+(heart?' heart':'');
+        if(heart)p.textContent=['💗','✨','🌸'][Math.random()*3|0];
+        p.style.left=(8+Math.random()*84)+'%';
+        p.style.top=(55+Math.random()*40)+'%';
+        p.style.setProperty('--dx',(Math.random()*40-20)+'px');
+        p.style.animationDuration=(1.4+Math.random()*1.6)+'s';
+        zone.appendChild(p);
+        setTimeout(()=>p.remove(),3200);
+      }
+    });
+  },340);
+}
+
+/* ---------- todos ---------- */
+let todoTab='genel', newTags=new Set();
+$$('.subtabs .tab').forEach(b=>b.addEventListener('click',()=>{
+  $$('.subtabs .tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  todoTab=b.dataset.t; renderTodos();
+}));
+$('#t-tags').addEventListener('click',e=>{
+  const el=e.target.closest('.rp'); if(!el)return;
+  el.classList.toggle('on'); el.classList.contains('on')?newTags.add(el.dataset.r):newTags.delete(el.dataset.r);
+});
+$('#t-go').addEventListener('click',async()=>{
+  const t=$('#t-text').value.trim();
+  if(!t){toast('Görev metni boş olamaz.');return}
+  state.todos.push({id:Date.now(),text:t,tags:[...newTags],done:false});
+  await sSet('bro:todos',state.todos);
+  $('#t-text').value=''; newTags.clear(); $$('#t-tags .rp').forEach(x=>x.classList.remove('on'));
+  renderTodos(); toast('Görev eklendi ✓');
+});
+
+function myTagMatch(td){return td.tags.some(tg=>state.me.roles.includes(TAG2ROLE[tg]))}
+
+function renderTodos(){
+  const L=$('#todo-list'); L.innerHTML='';
+  $('#todo-add').style.display=todoTab==='genel'?'flex':'none';
+  let list=state.todos;
+  if(todoTab==='kisisel')list=list.filter(td=>!td.done&&myTagMatch(td));
+  if(!list.length){L.innerHTML=`<div class="empty glass">${todoTab==='kisisel'?'Sana atanmış açık görev yok. Kral gibisin 👑':'Henüz görev yok.'}</div>`;return}
+  list.forEach(td=>{
+    const it=document.createElement('div'); it.className='todo-item glass'+(td.done?' done':''); it.dataset.id=td.id;
+    const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||td.tags.length===0;
+    const chk=document.createElement('button'); chk.className='chk'+(td.done?' done':'')+(canCheck?'':' locked');
+    chk.textContent='✓'; chk.title=canCheck?'':'Bu tag senin rolünde değil';
+    if(canCheck&&!td.done)chk.addEventListener('click',()=>completeTodo(td,it));
+    const tx=document.createElement('div'); tx.className='todo-txt'; tx.textContent=td.text;
+    const tg=document.createElement('div'); tg.className='tags';
+    td.tags.forEach(t=>{const s=document.createElement('span');s.className='tag'+(state.me.roles.includes(TAG2ROLE[t])?' mine':'');s.textContent=t;tg.appendChild(s)});
+    it.append(chk,tx,tg); L.appendChild(it);
+  });
+}
+
+async function completeTodo(td,el){
+  td.done=true; await sSet('bro:todos',state.todos);
+  const r=el.getBoundingClientRect();
+  for(let i=0;i<16;i++){
+    const e=document.createElement('span'); e.className='ember';
+    e.style.left=(r.left+Math.random()*r.width)+'px';
+    e.style.top=(r.top+r.height*0.5)+'px';
+    e.style.setProperty('--ex',(Math.random()*120-60)+'px');
+    e.style.setProperty('--ey',(-40-Math.random()*90)+'px');
+    document.body.appendChild(e); setTimeout(()=>e.remove(),950);
+  }
+  if(todoTab==='kisisel'){
+    el.classList.add('burning');
+    setTimeout(()=>renderTodos(),920);
+  }else{
+    renderTodos();
+  }
+  toast(document.body.classList.contains('tuna')?'Görev bitti! Harikasın 🌸':'Görev yandı gitti 🔥');
+}
+
+/* ---------- announcements ---------- */
+$('#a-go').addEventListener('click',async()=>{
+  const t=$('#a-text').value.trim(); if(!t){toast('Duyuru boş olamaz.');return}
+  state.anns.unshift({who:state.me.name,when:Date.now(),text:t});
+  await sSet('bro:anns',state.anns);
+  $('#a-text').value=''; renderAnns(); toast('Duyuru yayınlandı 📣');
+});
+function renderAnns(){
+  $('#ann-composer').style.display=state.me.roles.includes('admin')?'flex':'none';
+  const L=$('#ann-list'); L.innerHTML='';
+  if(!state.anns.length){L.innerHTML='<div class="empty glass">Henüz duyuru yok.</div>';return}
+  state.anns.forEach(a=>{
+    const d=document.createElement('div'); d.className='ann glass';
+    const dt=new Date(a.when);
+    d.innerHTML=`<div class="head"><span class="megaphone">📣</span><span class="who">${esc(a.who)}</span><span class="badge admin">admin</span><span class="when">${dt.toLocaleDateString('tr-TR')} ${dt.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span></div><div class="body">${esc(a.text)}</div>`;
+    L.appendChild(d);
+  });
+}
+
+/* ---------- profile ---------- */
+function initProfile(){
+  const st=state.me.style;
+  $('#pf-font').value=st.font;
+  $('#pf-c1').value=st.c1||'#ffffff'; $('#pf-c2').value=st.c2||'#888888';
+  $$('#pf-mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===st.mode));
+  $('#c2wrap').style.display=st.mode==='gradient'?'block':'none';
+  updatePreview();
+}
+$('#pf-mode').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  $$('#pf-mode button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  $('#c2wrap').style.display=b.dataset.m==='gradient'?'block':'none';
+  updatePreview();
+});
+['pf-font','pf-c1','pf-c2'].forEach(id=>$('#'+id).addEventListener('input',updatePreview));
+function currentStyle(){
+  return {font:$('#pf-font').value,
+    mode:$('#pf-mode .on').dataset.m,
+    c1:$('#pf-c1').value, c2:$('#pf-c2').value};
+}
+function updatePreview(){
+  const p=$('#pf-preview'); p.textContent=state.me?state.me.name:'önizleme';
+  styleName(p,{style:currentStyle()});
+}
+$('#pf-save').addEventListener('click',async()=>{
+  state.me.style=currentStyle();
+  const m=state.members.find(x=>x.name===state.me.name); if(m)m.style=state.me.style;
+  await sSet('bro:members',state.members);
+  renderAll(); toast('Stilin kaydedildi ✨');
+});
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+</script>
+</body>
+</html>
