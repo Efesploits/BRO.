@@ -220,17 +220,8 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
   <div id="login" class="glass">
     <h1>BRO<span class="dot">.</span></h1>
     <p>Ekibin cam panosu — giriş yap, ne döndüğünü gör.</p>
-    <input id="l-user" class="field" placeholder="Discord kullanıcı adın" maxlength="24" autocomplete="off">
-    <div class="rolepick" id="l-roles">
-      <span class="rp" data-r="animator">animator</span>
-      <span class="rp" data-r="scripter">scripter</span>
-      <span class="rp" data-r="sfx">sfx</span>
-      <span class="rp" data-r="vfx">vfx</span>
-      <span class="rp" data-r="arkadas">arkadaş</span>
-    </div>
     <button class="btn" id="l-discord" style="width:100%;justify-content:center;margin-bottom:10px">⌁ Discord ile Giriş</button>
-    <button class="btn ghost" id="l-go" style="width:100%;justify-content:center">Demo giriş (kullanıcı adıyla)</button>
-    <div class="hint" id="l-hint">Admin rolü seçilemez — sadece belirli Discord hesaplarına otomatik verilir.<br>Aktivitenin (oyun/müzik) görünmesi için <a href="https://discord.gg/lanyard" target="_blank" style="color:var(--ink)">discord.gg/lanyard</a> sunucusuna bir kere katılman gerekiyor.</div>
+    <div class="hint" id="l-hint">Rolün girişten sonra bir admin tarafından atanır.<br>Aktivitenin (oyun/müzik) görünmesi için <a href="https://discord.gg/lanyard" target="_blank" style="color:var(--ink)">discord.gg/lanyard</a> sunucusuna bir kere katılman gerekiyor.</div>
   </div>
 
   <!-- APP -->
@@ -248,7 +239,10 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
 
     <!-- HOME -->
     <section class="page show" id="p-home">
-      <h2 class="sec">Ekip · şu an neler oluyor</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 4px 18px">
+        <h2 class="sec" style="margin:0">Ekip · şu an neler oluyor</h2>
+        <button class="btn ghost" id="admin-mode-btn" style="display:none">🛡 Admin Modu: Kapalı</button>
+      </div>
       <div class="grid" id="members"></div>
     </section>
 
@@ -332,6 +326,10 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
   </div>
 </div>
 
+<footer style="position:relative;z-index:1;text-align:center;padding:22px 16px 30px;font-size:.75rem;color:var(--ink-faint)">
+  © 2026 BRO. — m3fxn &amp; tuna
+</footer>
+
 <div class="toast glass" id="toast"></div>
 <script>
 /* ================= BRO. app logic ================= */
@@ -365,6 +363,7 @@ const FIREBASE_CONFIG={
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
+const EDITABLE_ROLES=['animator','scripter','sfx','vfx','arkadas']; // admin buradan düzenlenemez
 const TAG2ROLE={animation:'animator',script:'scripter',sfx:'sfx',vfx:'vfx'};
 
 let state={me:null,members:[],todos:[],anns:[],projects:[],currentProject:null};
@@ -442,20 +441,12 @@ function resumeSession(m){
 }
 
 /* ---------- login ---------- */
-let pickedRoles=new Set();
-$('#l-roles').addEventListener('click',e=>{
-  const el=e.target.closest('.rp'); if(!el)return;
-  const r=el.dataset.r;
-  el.classList.toggle('on'); el.classList.contains('on')?pickedRoles.add(r):pickedRoles.delete(r);
-});
 async function loginAs(name,discordId,avatarUrl,rawUser){
   await boot();
   let m=state.members.find(x=>x.name.toLowerCase()===name.toLowerCase());
   if(!m){
-    if(pickedRoles.size===0)pickedRoles.add('arkadas');
     m={name,discordId:discordId||null,discordUser:rawUser||null,avatarUrl:avatarUrl||null,
-       roles:[...pickedRoles],status:'online',
-       act:discordId?null:{type:'game',t1:'BRO. panosu',t2:'yeni katıldı',ic:'✨'},
+       roles:['arkadas'],status:'online',act:null,
        style:{font:"'Space Grotesk',sans-serif",mode:'static',c1:'#ffffff'}};
     state.members.push(m);
   }else{
@@ -469,6 +460,7 @@ async function loginAs(name,discordId,avatarUrl,rawUser){
   const idNames=[name.toLowerCase(),(rawUser||m.discordUser||'').toLowerCase()];
   m.roles=m.roles.filter(r=>r!=='admin');
   if(ADMINS.some(a=>idNames.includes(a)))m.roles.unshift('admin');
+  if(!m.roles.length)m.roles=['arkadas'];
   await sSet('bro:members',state.members);
   state.me=m;
   try{localStorage.setItem('bro:session',m.name)}catch(e){}
@@ -478,19 +470,10 @@ async function loginAs(name,discordId,avatarUrl,rawUser){
   toast(isTuna()?'Hoş geldin Tuna! 🌸💗':'Hoş geldin, '+m.name+'!');
 }
 
-/* demo giriş */
-$('#l-go').addEventListener('click',()=>{
-  const name=$('#l-user').value.trim();
-  if(!name){toast('Kullanıcı adı lazım, bro.');return}
-  loginAs(name,null,null);
-});
-$('#l-user').addEventListener('keydown',e=>{if(e.key==='Enter')$('#l-go').click()});
-
 /* gerçek Discord OAuth (implicit flow — backend gerektirmez) */
 $('#l-discord').addEventListener('click',()=>{
   if(!DISCORD_CLIENT_ID){
     toast('Discord Client ID ayarlanmamış — dosyanın başındaki kurulum notuna bak.');
-    $('#l-hint').innerHTML='Gerçek Discord girişi için dosyadaki <b>DISCORD_CLIENT_ID</b> alanını doldur.<br>Şimdilik demo girişi kullanabilirsin.';
     return;
   }
   const u=new URL('https://discord.com/oauth2/authorize');
@@ -637,6 +620,25 @@ function styleName(el,m){
 
 function renderAll(){renderMembers();renderMeChip();renderProjects();renderTodos();renderAnns();initProfile();}
 
+/* ---------- admin mode (rol düzenleme / ekipten çıkarma) ---------- */
+let adminMode=false;
+function updateAdminModeBtn(){
+  const btn=$('#admin-mode-btn'); if(!btn||!state.me)return;
+  if(state.me.roles.includes('admin')){
+    btn.style.display='inline-flex';
+    btn.textContent=adminMode?'🛡 Admin Modu: Açık':'🛡 Admin Modu: Kapalı';
+  }else{
+    btn.style.display='none';
+    adminMode=false;
+  }
+}
+$('#admin-mode-btn').addEventListener('click',()=>{
+  if(!state.me||!state.me.roles.includes('admin'))return;
+  adminMode=!adminMode;
+  renderMembers();
+  toast(adminMode?'Admin modu açıldı':'Admin modu kapatıldı');
+});
+
 function makeAva(m,size){
   const ava=document.createElement('div'); ava.className='ava';
   ava.style.width=size+'px'; ava.style.height=size+'px'; ava.style.fontSize=(size*0.42)+'px';
@@ -660,6 +662,7 @@ function renderMeChip(){
 
 /* ---------- members ---------- */
 function renderMembers(){
+  updateAdminModeBtn();
   const g=$('#members'); g.innerHTML='';
   if(!state.members.length){
     g.innerHTML='<div class="empty glass">Henüz kimse giriş yapmadı. İlk giren sen ol!</div>';
@@ -685,18 +688,38 @@ function renderMembers(){
     }else if(m.status==='offline'){
       const off=document.createElement('div'); off.className='offline-note'; off.textContent='Çevrimdışı · en son bugün görüldü'; card.appendChild(off);
     }
-    if(state.me.roles.includes('admin')&&m.name.toLowerCase()!==state.me.name.toLowerCase()){
-      const rm=document.createElement('button'); rm.className='tab'; rm.textContent='✕ Ekipten çıkar';
-      rm.style.cssText='margin-top:12px;color:var(--ink-dim);font-size:.72rem;padding:5px 12px;width:100%;text-align:center';
-      rm.addEventListener('click',async(ev)=>{
-        ev.stopPropagation();
-        if(!confirm(m.name+' kişisini ekipten çıkarmak istediğine emin misin?'))return;
-        state.members=state.members.filter(x=>x!==m);
-        await sSet('bro:members',state.members);
-        subscribeLanyardIds();
-        renderMembers(); toast(m.name+' ekipten çıkarıldı');
+    if(adminMode&&state.me.roles.includes('admin')){
+      const panel=document.createElement('div'); panel.style.cssText='margin-top:14px;padding-top:14px;border-top:1px solid var(--stroke)';
+      const roleLabel=document.createElement('div'); roleLabel.textContent='Roller (düzenle)';
+      roleLabel.style.cssText='font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px';
+      const pills=document.createElement('div'); pills.className='rolepick'; pills.style.cssText='margin:0 0 12px';
+      EDITABLE_ROLES.forEach(r=>{
+        const p=document.createElement('span'); p.className='rp'+(m.roles.includes(r)?' on':''); p.textContent=r==='arkadas'?'arkadaş':r;
+        p.addEventListener('click',async ev=>{
+          ev.stopPropagation();
+          if(m.roles.includes(r)){ m.roles=m.roles.filter(x=>x!==r); }
+          else{ m.roles.push(r); }
+          if(!m.roles.some(x=>x!=='admin'))m.roles.push('arkadas'); // en az bir rol kalsın
+          await sSet('bro:members',state.members);
+          renderMembers(); toast(m.name+' rolleri güncellendi');
+        });
+        pills.appendChild(p);
       });
-      card.appendChild(rm);
+      panel.append(roleLabel,pills);
+      if(m.name.toLowerCase()!==state.me.name.toLowerCase()){
+        const rm=document.createElement('button'); rm.className='tab'; rm.textContent='✕ Ekipten çıkar';
+        rm.style.cssText='color:var(--ink-dim);font-size:.72rem;padding:5px 12px;width:100%;text-align:center';
+        rm.addEventListener('click',async ev=>{
+          ev.stopPropagation();
+          if(!confirm(m.name+' kişisini ekipten çıkarmak istediğine emin misin?'))return;
+          state.members=state.members.filter(x=>x!==m);
+          await sSet('bro:members',state.members);
+          subscribeLanyardIds();
+          renderMembers(); toast(m.name+' ekipten çıkarıldı');
+        });
+        panel.appendChild(rm);
+      }
+      card.appendChild(panel);
     }
     g.appendChild(card);
   });
