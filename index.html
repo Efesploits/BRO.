@@ -239,7 +239,7 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
       <div class="logo">BRO<span class="dot">.</span></div>
       <nav>
         <button class="tab active" data-p="home">Ana Sayfa</button>
-        <button class="tab" data-p="todo">To-Do</button>
+        <button class="tab" data-p="projects">Projeler</button>
         <button class="tab" data-p="ann">Duyurular</button>
         <button class="tab" data-p="prof">Profil</button>
       </nav>
@@ -252,23 +252,38 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
       <div class="grid" id="members"></div>
     </section>
 
-    <!-- TODO -->
-    <section class="page" id="p-todo">
-      <h2 class="sec">Görevler</h2>
-      <div class="subtabs">
-        <button class="tab active" data-t="genel">Genel</button>
-        <button class="tab" data-t="kisisel">Bana Özel</button>
-      </div>
-      <div id="todo-list"></div>
-      <div class="addrow glass" id="todo-add">
-        <input class="field" id="t-text" placeholder="Yeni görev…" maxlength="90">
-        <div class="rolepick" style="margin:0" id="t-tags">
-          <span class="rp" data-r="animation">animation</span>
-          <span class="rp" data-r="script">script</span>
-          <span class="rp" data-r="sfx">sfx</span>
-          <span class="rp" data-r="vfx">vfx</span>
+    <!-- PROJECTS -->
+    <section class="page" id="p-projects">
+      <h2 class="sec">Projeler</h2>
+
+      <!-- proje listesi -->
+      <div id="proj-view">
+        <div class="addrow glass" id="proj-new" style="display:none">
+          <input class="field" id="pj-name" placeholder="Yeni proje adı…" maxlength="60">
+          <button class="btn" id="pj-go">+ Proje Oluştur</button>
         </div>
-        <button class="btn" id="t-go">Ekle</button>
+        <div class="grid" id="proj-grid" style="margin-top:16px"></div>
+      </div>
+
+      <!-- proje detayı (görevler) -->
+      <div id="proj-detail" style="display:none">
+        <button class="tab" id="proj-back" style="margin-bottom:14px">← Projelere dön</button>
+        <h2 class="sec" id="proj-detail-title">Görevler</h2>
+        <div class="subtabs">
+          <button class="tab active" data-t="genel">Genel</button>
+          <button class="tab" data-t="kisisel">Bana Özel</button>
+        </div>
+        <div id="todo-list"></div>
+        <div class="addrow glass" id="todo-add">
+          <input class="field" id="t-text" placeholder="Yeni görev…" maxlength="90">
+          <div class="rolepick" style="margin:0" id="t-tags">
+            <span class="rp" data-r="animation">animation</span>
+            <span class="rp" data-r="script">script</span>
+            <span class="rp" data-r="sfx">sfx</span>
+            <span class="rp" data-r="vfx">vfx</span>
+          </div>
+          <button class="btn" id="t-go">Ekle</button>
+        </div>
       </div>
     </section>
 
@@ -352,7 +367,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
 const TAG2ROLE={animation:'animator',script:'scripter',sfx:'sfx',vfx:'vfx'};
 
-let state={me:null,members:[],todos:[],anns:[]};
+let state={me:null,members:[],todos:[],anns:[],projects:[],currentProject:null};
 let db=null;
 if(FIREBASE_CONFIG&&window.firebase){
   try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database();}
@@ -378,7 +393,7 @@ async function sSet(k,v){
 /* canlı senkron: başka biri girince / görev bitince anında herkese yansır */
 function subscribeLive(){
   if(!db)return;
-  const map={'bro:members':'members','bro:todos':'todos','bro:anns':'anns'};
+  const map={'bro:members':'members','bro:todos':'todos','bro:anns':'anns','bro:projects':'projects'};
   Object.entries(map).forEach(([k,st])=>{
     db.ref(FKEY(k)).on('value',snap=>{
       if(!snap.exists())return;
@@ -387,7 +402,7 @@ function subscribeLive(){
       if(state.me){
         const me=state.members.find(x=>x.name.toLowerCase()===state.me.name.toLowerCase());
         if(me)state.me=me;
-        renderMembers();renderMeChip();renderTodos();renderAnns();
+        renderMembers();renderMeChip();renderProjects();renderTodos();renderAnns();
       }
     });
   });
@@ -397,12 +412,14 @@ function subscribeLive(){
 const SEED_MEMBERS=[];
 const SEED_TODOS=[];
 const SEED_ANNS=[];
+const SEED_PROJECTS=[];
 
 /* ---------- boot ---------- */
 async function boot(){
   state.members=await sGet('bro:members',null)||SEED_MEMBERS;
   state.todos=await sGet('bro:todos',null)||SEED_TODOS;
   state.anns=await sGet('bro:anns',null)||SEED_ANNS;
+  state.projects=await sGet('bro:projects',null)||SEED_PROJECTS;
 }
 /* sayfa açılışı: OAuth dönüşü yoksa kayıtlı oturumu geri yükle */
 (async function init(){
@@ -618,7 +635,7 @@ function styleName(el,m){
   }
 }
 
-function renderAll(){renderMembers();renderMeChip();renderTodos();renderAnns();initProfile();}
+function renderAll(){renderMembers();renderMeChip();renderProjects();renderTodos();renderAnns();initProfile();}
 
 function makeAva(m,size){
   const ava=document.createElement('div'); ava.className='ava';
@@ -668,6 +685,19 @@ function renderMembers(){
     }else if(m.status==='offline'){
       const off=document.createElement('div'); off.className='offline-note'; off.textContent='Çevrimdışı · en son bugün görüldü'; card.appendChild(off);
     }
+    if(state.me.roles.includes('admin')&&m.name.toLowerCase()!==state.me.name.toLowerCase()){
+      const rm=document.createElement('button'); rm.className='tab'; rm.textContent='✕ Ekipten çıkar';
+      rm.style.cssText='margin-top:12px;color:var(--ink-dim);font-size:.72rem;padding:5px 12px;width:100%;text-align:center';
+      rm.addEventListener('click',async(ev)=>{
+        ev.stopPropagation();
+        if(!confirm(m.name+' kişisini ekipten çıkarmak istediğine emin misin?'))return;
+        state.members=state.members.filter(x=>x!==m);
+        await sSet('bro:members',state.members);
+        subscribeLanyardIds();
+        renderMembers(); toast(m.name+' ekipten çıkarıldı');
+      });
+      card.appendChild(rm);
+    }
     g.appendChild(card);
   });
 }
@@ -694,7 +724,49 @@ function startParticles(){
   },340);
 }
 
-/* ---------- todos ---------- */
+/* ---------- projects ---------- */
+function renderProjects(){
+  $('#proj-new').style.display=state.me.roles.includes('admin')?'flex':'none';
+  const grid=$('#proj-grid'); grid.innerHTML='';
+  if(!state.projects.length){
+    grid.innerHTML=`<div class="empty glass">${state.me.roles.includes('admin')?'Henüz proje yok. Yukarıdan ilk projeyi oluştur.':'Henüz proje açılmamış.'}</div>`;
+    return;
+  }
+  state.projects.forEach(p=>{
+    const items=state.todos.filter(t=>t.projectId===p.id);
+    const done=items.filter(t=>t.done).length;
+    const card=document.createElement('div'); card.className='card glass'; card.style.cursor='pointer';
+    card.innerHTML=`<div class="uname" style="margin-bottom:6px">${esc(p.name)}</div>
+      <div style="font-size:.78rem;color:var(--ink-dim)">${p.by?('kurucu: '+esc(p.by)):''}</div>
+      <div class="activity" style="margin-top:14px"><span class="ic">📁</span><div><div class="t1">${done}/${items.length} görev tamam</div><div class="t2">tıkla ve aç</div></div></div>`;
+    card.addEventListener('click',()=>openProject(p.id));
+    grid.appendChild(card);
+  });
+}
+$('#pj-go').addEventListener('click',async()=>{
+  if(!state.me.roles.includes('admin')){toast('Sadece adminler proje açabilir.');return}
+  const name=$('#pj-name').value.trim();
+  if(!name){toast('Proje adı boş olamaz.');return}
+  state.projects.push({id:Date.now(),name,by:state.me.name,createdAt:Date.now()});
+  await sSet('bro:projects',state.projects);
+  $('#pj-name').value=''; renderProjects(); toast('Proje oluşturuldu ✓');
+});
+function openProject(id){
+  state.currentProject=id;
+  const p=state.projects.find(x=>x.id===id);
+  $('#proj-detail-title').textContent='Görevler · '+(p?p.name:'');
+  $('#proj-view').style.display='none';
+  $('#proj-detail').style.display='block';
+  renderTodos();
+}
+$('#proj-back').addEventListener('click',()=>{
+  state.currentProject=null;
+  $('#proj-detail').style.display='none';
+  $('#proj-view').style.display='block';
+  renderProjects();
+});
+
+/* ---------- todos (proje içi) ---------- */
 let todoTab='genel', newTags=new Set();
 $$('.subtabs .tab').forEach(b=>b.addEventListener('click',()=>{
   $$('.subtabs .tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
@@ -707,20 +779,22 @@ $('#t-tags').addEventListener('click',e=>{
 $('#t-go').addEventListener('click',async()=>{
   const t=$('#t-text').value.trim();
   if(!t){toast('Görev metni boş olamaz.');return}
-  state.todos.push({id:Date.now(),text:t,tags:[...newTags],done:false});
+  if(!state.currentProject){toast('Önce bir proje seç.');return}
+  state.todos.push({id:Date.now(),text:t,tags:[...newTags],done:false,projectId:state.currentProject});
   await sSet('bro:todos',state.todos);
   $('#t-text').value=''; newTags.clear(); $$('#t-tags .rp').forEach(x=>x.classList.remove('on'));
-  renderTodos(); toast('Görev eklendi ✓');
+  renderTodos(); renderProjects(); toast('Görev eklendi ✓');
 });
 
 function myTagMatch(td){return td.tags.some(tg=>state.me.roles.includes(TAG2ROLE[tg]))}
 
 function renderTodos(){
-  const L=$('#todo-list'); L.innerHTML='';
+  if(!state.currentProject)return; // proje seçili değilse (proje listesi görünümündeyiz) çizecek bir şey yok
+  const L=$('#todo-list'); if(!L)return; L.innerHTML='';
   $('#todo-add').style.display=todoTab==='genel'?'flex':'none';
-  let list=state.todos;
+  let list=state.todos.filter(td=>td.projectId===state.currentProject);
   if(todoTab==='kisisel')list=list.filter(td=>!td.done&&myTagMatch(td));
-  if(!list.length){L.innerHTML=`<div class="empty glass">${todoTab==='kisisel'?'Sana atanmış açık görev yok. Kral gibisin 👑':'Henüz görev yok.'}</div>`;return}
+  if(!list.length){L.innerHTML=`<div class="empty glass">${todoTab==='kisisel'?'Sana atanmış açık görev yok. Kral gibisin 👑':'Bu projede henüz görev yok.'}</div>`;return}
   list.forEach(td=>{
     const it=document.createElement('div'); it.className='todo-item glass'+(td.done?' done':''); it.dataset.id=td.id;
     const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||td.tags.length===0;
@@ -747,9 +821,9 @@ async function completeTodo(td,el){
   }
   if(todoTab==='kisisel'){
     el.classList.add('burning');
-    setTimeout(()=>renderTodos(),920);
+    setTimeout(()=>{renderTodos();renderProjects();},920);
   }else{
-    renderTodos();
+    renderTodos(); renderProjects();
   }
   toast(document.body.classList.contains('tuna')?'Görev bitti! Harikasın 🌸':'Görev yandı gitti 🔥');
 }
@@ -757,7 +831,7 @@ async function completeTodo(td,el){
 /* ---------- announcements ---------- */
 $('#a-go').addEventListener('click',async()=>{
   const t=$('#a-text').value.trim(); if(!t){toast('Duyuru boş olamaz.');return}
-  state.anns.unshift({who:state.me.name,when:Date.now(),text:t});
+  state.anns.unshift({id:Date.now(),who:state.me.name,when:Date.now(),text:t});
   await sSet('bro:anns',state.anns);
   $('#a-text').value=''; renderAnns(); toast('Duyuru yayınlandı 📣');
 });
@@ -765,10 +839,22 @@ function renderAnns(){
   $('#ann-composer').style.display=state.me.roles.includes('admin')?'flex':'none';
   const L=$('#ann-list'); L.innerHTML='';
   if(!state.anns.length){L.innerHTML='<div class="empty glass">Henüz duyuru yok.</div>';return}
+  const isAdmin=state.me.roles.includes('admin');
   state.anns.forEach(a=>{
     const d=document.createElement('div'); d.className='ann glass';
     const dt=new Date(a.when);
     d.innerHTML=`<div class="head"><span class="megaphone">📣</span><span class="who">${esc(a.who)}</span><span class="badge admin">admin</span><span class="when">${dt.toLocaleDateString('tr-TR')} ${dt.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span></div><div class="body">${esc(a.text)}</div>`;
+    if(isAdmin){
+      const del=document.createElement('button'); del.className='tab'; del.textContent='🗑 Kaldır';
+      del.style.cssText='margin-top:10px;color:var(--ink-dim);font-size:.75rem;padding:5px 12px';
+      del.addEventListener('click',async()=>{
+        if(!confirm('Bu duyuruyu kaldırmak istediğine emin misin?'))return;
+        state.anns=state.anns.filter(x=>x!==a);
+        await sSet('bro:anns',state.anns);
+        renderAnns(); toast('Duyuru kaldırıldı');
+      });
+      d.appendChild(del);
+    }
     L.appendChild(d);
   });
 }
