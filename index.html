@@ -233,6 +233,7 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
         <button class="tab" data-p="projects">Projeler</button>
         <button class="tab" data-p="ann">Duyurular</button>
         <button class="tab" data-p="prof">Profil</button>
+        <button class="tab" data-p="together">Together</button>
       </nav>
       <div class="me-chip" id="me-chip" title="Çıkış yap"></div>
     </header>
@@ -241,14 +242,17 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
     <section class="page show" id="p-home">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 4px 18px">
         <h2 class="sec" style="margin:0">Ekip · şu an neler oluyor</h2>
-        <button class="btn ghost" id="admin-mode-btn" style="display:none">🛡 Admin Modu: Kapalı</button>
+        <button class="btn ghost admin-mode-btn" style="display:none">🛡 Admin Modu: Kapalı</button>
       </div>
       <div class="grid" id="members"></div>
     </section>
 
     <!-- PROJECTS -->
     <section class="page" id="p-projects">
-      <h2 class="sec">Projeler</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 4px 18px">
+        <h2 class="sec" style="margin:0">Projeler</h2>
+        <button class="btn ghost admin-mode-btn" style="display:none">🛡 Admin Modu: Kapalı</button>
+      </div>
 
       <!-- proje listesi -->
       <div id="proj-view">
@@ -283,7 +287,10 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
 
     <!-- ANNOUNCEMENTS -->
     <section class="page" id="p-ann">
-      <h2 class="sec">Duyurular</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 4px 18px">
+        <h2 class="sec" style="margin:0">Duyurular</h2>
+        <button class="btn ghost admin-mode-btn" style="display:none">🛡 Admin Modu: Kapalı</button>
+      </div>
       <div id="ann-composer" class="glass addrow" style="display:none;flex-direction:column;align-items:stretch">
         <textarea class="field" id="a-text" placeholder="Ekibe duyur…" maxlength="500"></textarea>
         <button class="btn" id="a-go" style="align-self:flex-end">📣 Yayınla</button>
@@ -577,6 +584,10 @@ function tunaRain(){
 
 /* ---------- nav ---------- */
 $$('nav .tab').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.p==='together'){
+    window.open('https://unknownbrick.github.io/brostg/','_blank','noopener,noreferrer');
+    return; // burada bir sayfa değişimi yok, dış sekmede açılır
+  }
   $$('nav .tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
   $$('.page').forEach(p=>p.classList.remove('show'));
   $('#p-'+b.dataset.p).classList.add('show');
@@ -620,24 +631,24 @@ function styleName(el,m){
 
 function renderAll(){renderMembers();renderMeChip();renderProjects();renderTodos();renderAnns();initProfile();}
 
-/* ---------- admin mode (rol düzenleme / ekipten çıkarma) ---------- */
+/* ---------- admin mode (rol düzenleme / ekipten çıkarma / silme) — site genelinde tek durum ---------- */
 let adminMode=false;
 function updateAdminModeBtn(){
-  const btn=$('#admin-mode-btn'); if(!btn||!state.me)return;
-  if(state.me.roles.includes('admin')){
-    btn.style.display='inline-flex';
+  if(!state.me)return;
+  const isAdmin=state.me.roles.includes('admin');
+  if(!isAdmin)adminMode=false;
+  $$('.admin-mode-btn').forEach(btn=>{
+    btn.style.display=isAdmin?'inline-flex':'none';
     btn.textContent=adminMode?'🛡 Admin Modu: Açık':'🛡 Admin Modu: Kapalı';
-  }else{
-    btn.style.display='none';
-    adminMode=false;
-  }
+  });
 }
-$('#admin-mode-btn').addEventListener('click',()=>{
+$$('.admin-mode-btn').forEach(btn=>btn.addEventListener('click',()=>{
   if(!state.me||!state.me.roles.includes('admin'))return;
   adminMode=!adminMode;
-  renderMembers();
+  updateAdminModeBtn();
+  renderMembers(); renderProjects(); renderTodos(); renderAnns();
   toast(adminMode?'Admin modu açıldı':'Admin modu kapatıldı');
-});
+}));
 
 function makeAva(m,size){
   const ava=document.createElement('div'); ava.className='ava';
@@ -755,6 +766,7 @@ function renderProjects(){
     grid.innerHTML=`<div class="empty glass">${state.me.roles.includes('admin')?'Henüz proje yok. Yukarıdan ilk projeyi oluştur.':'Henüz proje açılmamış.'}</div>`;
     return;
   }
+  const canDelete=adminMode&&state.me.roles.includes('admin');
   state.projects.forEach(p=>{
     const items=state.todos.filter(t=>t.projectId===p.id);
     const done=items.filter(t=>t.done).length;
@@ -763,6 +775,21 @@ function renderProjects(){
       <div style="font-size:.78rem;color:var(--ink-dim)">${p.by?('kurucu: '+esc(p.by)):''}</div>
       <div class="activity" style="margin-top:14px"><span class="ic">📁</span><div><div class="t1">${done}/${items.length} görev tamam</div><div class="t2">tıkla ve aç</div></div></div>`;
     card.addEventListener('click',()=>openProject(p.id));
+    if(canDelete){
+      const del=document.createElement('button'); del.className='tab'; del.textContent='🗑 Projeyi Sil';
+      del.style.cssText='margin-top:12px;width:100%;text-align:center;color:var(--ink-dim);font-size:.72rem;padding:5px 12px';
+      del.addEventListener('click',async ev=>{
+        ev.stopPropagation();
+        if(!confirm('"'+p.name+'" projesini ve içindeki tüm görevleri kalıcı olarak silmek istediğine emin misin?'))return;
+        state.projects=state.projects.filter(x=>x!==p);
+        state.todos=state.todos.filter(t=>t.projectId!==p.id);
+        if(state.currentProject===p.id)state.currentProject=null;
+        await sSet('bro:projects',state.projects);
+        await sSet('bro:todos',state.todos);
+        renderProjects(); toast('Proje silindi');
+      });
+      card.appendChild(del);
+    }
     grid.appendChild(card);
   });
 }
@@ -818,6 +845,7 @@ function renderTodos(){
   let list=state.todos.filter(td=>td.projectId===state.currentProject);
   if(todoTab==='kisisel')list=list.filter(td=>!td.done&&myTagMatch(td));
   if(!list.length){L.innerHTML=`<div class="empty glass">${todoTab==='kisisel'?'Sana atanmış açık görev yok. Kral gibisin 👑':'Bu projede henüz görev yok.'}</div>`;return}
+  const canDelete=adminMode&&state.me.roles.includes('admin');
   list.forEach(td=>{
     const it=document.createElement('div'); it.className='todo-item glass'+(td.done?' done':''); it.dataset.id=td.id;
     const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||td.tags.length===0;
@@ -827,7 +855,20 @@ function renderTodos(){
     const tx=document.createElement('div'); tx.className='todo-txt'; tx.textContent=td.text;
     const tg=document.createElement('div'); tg.className='tags';
     td.tags.forEach(t=>{const s=document.createElement('span');s.className='tag'+(state.me.roles.includes(TAG2ROLE[t])?' mine':'');s.textContent=t;tg.appendChild(s)});
-    it.append(chk,tx,tg); L.appendChild(it);
+    it.append(chk,tx,tg);
+    if(canDelete){
+      const del=document.createElement('button'); del.textContent='✕'; del.title='Görevi kaldır';
+      del.style.cssText='background:transparent;border:none;color:var(--ink-faint);cursor:pointer;font-size:1rem;padding:4px 8px;flex:none';
+      del.addEventListener('click',async ev=>{
+        ev.stopPropagation();
+        if(!confirm('Bu görevi kaldırmak istediğine emin misin?'))return;
+        state.todos=state.todos.filter(x=>x!==td);
+        await sSet('bro:todos',state.todos);
+        renderTodos(); renderProjects(); toast('Görev kaldırıldı');
+      });
+      it.appendChild(del);
+    }
+    L.appendChild(it);
   });
 }
 
@@ -859,15 +900,16 @@ $('#a-go').addEventListener('click',async()=>{
   $('#a-text').value=''; renderAnns(); toast('Duyuru yayınlandı 📣');
 });
 function renderAnns(){
+  updateAdminModeBtn();
   $('#ann-composer').style.display=state.me.roles.includes('admin')?'flex':'none';
   const L=$('#ann-list'); L.innerHTML='';
   if(!state.anns.length){L.innerHTML='<div class="empty glass">Henüz duyuru yok.</div>';return}
-  const isAdmin=state.me.roles.includes('admin');
+  const canDelete=adminMode&&state.me.roles.includes('admin');
   state.anns.forEach(a=>{
     const d=document.createElement('div'); d.className='ann glass';
     const dt=new Date(a.when);
     d.innerHTML=`<div class="head"><span class="megaphone">📣</span><span class="who">${esc(a.who)}</span><span class="badge admin">admin</span><span class="when">${dt.toLocaleDateString('tr-TR')} ${dt.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span></div><div class="body">${esc(a.text)}</div>`;
-    if(isAdmin){
+    if(canDelete){
       const del=document.createElement('button'); del.className='tab'; del.textContent='🗑 Kaldır';
       del.style.cssText='margin-top:10px;color:var(--ink-dim);font-size:.75rem;padding:5px 12px';
       del.addEventListener('click',async()=>{
