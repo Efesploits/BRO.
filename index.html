@@ -282,10 +282,11 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
 
     <!-- PROFILE -->
     <section class="page" id="p-prof">
-      <h2 class="sec">Profil · kullanıcı adı stilin</h2>
+      <h2 class="sec">Profil</h2>
       <div class="prof glass">
+        <div id="pf-head" style="display:flex;align-items:center;gap:14px;margin-bottom:24px"></div>
         <div class="frow">
-          <label>Font</label>
+          <label>Kullanıcı adı fontu</label>
           <select class="field" id="pf-font">
             <option value="'Space Grotesk',sans-serif">Space Grotesk — temiz</option>
             <option value="'Unbounded',sans-serif">Unbounded — kalın & fütüristik</option>
@@ -345,10 +346,7 @@ async function sSet(k,v){
 }
 
 /* ---------- seed data ---------- */
-const SEED_MEMBERS=[
-  {name:'Mira',roles:['animator'],status:'online',act:{type:'music',t1:'Blinding Lights',t2:'The Weeknd · Spotify',ic:'🎧'},style:{font:"'Pacifico',cursive",mode:'static',c1:'#f4f4f5'}},
-  {name:'Efe',roles:['sfx','arkadas'],status:'idle',act:{type:'game',t1:'FL Studio',t2:'ses tasarımı',ic:'🎛️'},style:{font:"'Press Start 2P',monospace",mode:'static',c1:'#f4f4f5'}},
-];
+const SEED_MEMBERS=[];
 const SEED_TODOS=[];
 const SEED_ANNS=[];
 
@@ -370,18 +368,19 @@ $('#l-roles').addEventListener('click',e=>{
   const r=el.dataset.r;
   el.classList.toggle('on'); el.classList.contains('on')?pickedRoles.add(r):pickedRoles.delete(r);
 });
-async function loginAs(name,discordId){
+async function loginAs(name,discordId,avatarUrl){
   await boot();
   let m=state.members.find(x=>x.name.toLowerCase()===name.toLowerCase());
   if(!m){
     if(pickedRoles.size===0)pickedRoles.add('arkadas');
-    m={name,discordId:discordId||null,roles:[...pickedRoles],status:'online',
+    m={name,discordId:discordId||null,avatarUrl:avatarUrl||null,roles:[...pickedRoles],status:'online',
        act:discordId?null:{type:'game',t1:'BRO. panosu',t2:'yeni katıldı',ic:'✨'},
        style:{font:"'Space Grotesk',sans-serif",mode:'static',c1:'#ffffff'}};
     state.members.push(m);
   }else{
     m.status='online';
     if(discordId)m.discordId=discordId;
+    if(avatarUrl)m.avatarUrl=avatarUrl;
   }
   /* admin sadece izin verilen hesaplara — kimse kendine seçemez */
   m.roles=m.roles.filter(r=>r!=='admin');
@@ -398,7 +397,7 @@ async function loginAs(name,discordId){
 $('#l-go').addEventListener('click',()=>{
   const name=$('#l-user').value.trim();
   if(!name){toast('Kullanıcı adı lazım, bro.');return}
-  loginAs(name,null);
+  loginAs(name,null,null);
 });
 $('#l-user').addEventListener('keydown',e=>{if(e.key==='Enter')$('#l-go').click()});
 
@@ -427,7 +426,10 @@ $('#l-discord').addEventListener('click',()=>{
     const r=await fetch('https://discord.com/api/users/@me',{headers:{Authorization:'Bearer '+tok}});
     if(!r.ok)throw 0;
     const u=await r.json();
-    await loginAs(u.username,u.id);
+    const avatarUrl=u.avatar
+      ?`https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=128`
+      :`https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id)>>22n)%6n}.png`;
+    await loginAs(u.global_name||u.username,u.id,avatarUrl);
     refreshPresence(); // Lanyard'dan gerçek aktiviteyi çek
   }catch(e){toast('Discord girişi başarısız oldu, tekrar dene.')}
 })();
@@ -486,7 +488,23 @@ $$('nav .tab').forEach(b=>b.addEventListener('click',()=>{
   $$('.page').forEach(p=>p.classList.remove('show'));
   $('#p-'+b.dataset.p).classList.add('show');
 }));
-$('#me-chip').addEventListener('click',()=>location.reload());
+$('#me-chip').addEventListener('click',e=>{
+  e.stopPropagation();
+  const existing=document.getElementById('me-menu');
+  if(existing){existing.remove();return}
+  const menu=document.createElement('div'); menu.id='me-menu'; menu.className='glass';
+  menu.style.cssText='position:absolute;top:calc(100% + 8px);right:0;padding:8px;min-width:160px;z-index:60';
+  const b=document.createElement('button'); b.className='tab'; b.style.cssText='width:100%;text-align:left;color:var(--ink)';
+  b.textContent='⎋ Çıkış yap';
+  b.addEventListener('click',()=>{ if(confirm('Çıkış yapmak istediğine emin misin, '+state.me.name+'?')) location.reload(); });
+  menu.appendChild(b);
+  $('#me-chip').style.position='relative';
+  $('#me-chip').appendChild(menu);
+});
+document.addEventListener('click',e=>{
+  const menu=document.getElementById('me-menu');
+  if(menu&&!e.target.closest('#me-chip'))menu.remove();
+});
 
 /* ---------- render helpers ---------- */
 function styleName(el,m){
@@ -504,22 +522,40 @@ function styleName(el,m){
 
 function renderAll(){renderMembers();renderMeChip();renderTodos();renderAnns();initProfile();}
 
+function makeAva(m,size){
+  const ava=document.createElement('div'); ava.className='ava';
+  ava.style.width=size+'px'; ava.style.height=size+'px'; ava.style.fontSize=(size*0.42)+'px';
+  if(m.avatarUrl){
+    const img=document.createElement('img'); img.src=m.avatarUrl; img.alt=m.name;
+    img.style.cssText='width:100%;height:100%;border-radius:50%;object-fit:cover';
+    ava.appendChild(img);
+  }else{
+    ava.appendChild(document.createTextNode(m.name[0].toUpperCase()));
+  }
+  return ava;
+}
+
 function renderMeChip(){
   const c=$('#me-chip'); c.innerHTML='';
-  const a=document.createElement('div');a.className='ava';a.textContent=state.me.name[0].toUpperCase();
+  const a=makeAva(state.me,32);
   const s=document.createElement('span');s.className='uname';s.textContent=state.me.name;styleName(s,state.me);
-  c.append(a,s);
+  const chev=document.createElement('span'); chev.textContent='▾'; chev.style.cssText='font-size:.7rem;color:var(--ink-faint);margin-left:2px';
+  c.append(a,s,chev);
 }
 
 /* ---------- members ---------- */
 function renderMembers(){
   const g=$('#members'); g.innerHTML='';
+  if(!state.members.length){
+    g.innerHTML='<div class="empty glass">Henüz kimse giriş yapmadı. İlk giren sen ol!</div>';
+    return;
+  }
   const order={online:0,idle:1,offline:2};
   [...state.members].sort((a,b)=>order[a.status]-order[b.status]).forEach(m=>{
     const card=document.createElement('div'); card.className='card glass'; card.dataset.status=m.status;
     const ptc=document.createElement('div'); ptc.className='ptc';
     const row=document.createElement('div'); row.className='mrow';
-    const ava=document.createElement('div'); ava.className='ava'; ava.textContent=m.name[0].toUpperCase();
+    const ava=makeAva(m,52);
     const st=document.createElement('span'); st.className='status '+m.status; ava.appendChild(st);
     const info=document.createElement('div');
     const un=document.createElement('div'); un.className='uname'; un.textContent=m.name; styleName(un,m);
@@ -641,6 +677,14 @@ function renderAnns(){
 
 /* ---------- profile ---------- */
 function initProfile(){
+  const head=$('#pf-head'); head.innerHTML='';
+  head.appendChild(makeAva(state.me,64));
+  const info=document.createElement('div');
+  const rolesTxt=state.me.roles.map(r=>r==='arkadas'?'arkadaş':r).join(' · ');
+  info.innerHTML=`<div style="font-weight:700;font-size:1.1rem">${esc(state.me.name)}</div>
+    <div style="font-size:.78rem;color:var(--ink-dim);margin-top:3px">${rolesTxt}</div>
+    <div style="font-size:.72rem;color:var(--ink-faint);margin-top:2px">${state.me.discordId?'Discord hesabı bağlı ✓':'Demo giriş — Discord bağlı değil'}</div>`;
+  head.appendChild(info);
   const st=state.me.style;
   $('#pf-font').value=st.font;
   $('#pf-c1').value=st.c1||'#ffffff'; $('#pf-c2').value=st.c2||'#888888';
