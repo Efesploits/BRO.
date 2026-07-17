@@ -141,6 +141,10 @@ body.tuna .p.heart{background:none;font-size:9px}
 
 /* ---------- todo ---------- */
 .subtabs{display:flex;gap:8px;margin-bottom:18px}
+.folder-head{display:flex;align-items:center;gap:8px;margin:22px 4px 10px;color:var(--ink-dim);font-size:.82rem;font-weight:700;letter-spacing:.04em}
+.folder-head:first-child{margin-top:2px}
+.folder-head .ic{font-size:.9rem}
+.folder-count{font-weight:400;color:var(--ink-faint);font-size:.75rem}
 .todo-item{display:flex;align-items:center;gap:14px;padding:15px 18px;margin-bottom:10px;position:relative;overflow:hidden}
 .chk{width:22px;height:22px;flex:none;border-radius:8px;border:1.5px solid var(--stroke-hi);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;transition:.2s;background:transparent;color:transparent}
 .chk.done{background:var(--ink);border-color:var(--ink);color:var(--bg)}
@@ -282,8 +286,9 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
           <button class="tab" data-t="kisisel">Bana Özel</button>
         </div>
         <div id="todo-list"></div>
-        <div class="addrow glass" id="todo-add">
-          <input class="field" id="t-text" placeholder="Yeni görev…" maxlength="90">
+        <div class="addrow glass" id="todo-add" style="flex-wrap:wrap">
+          <input class="field" id="t-folder" placeholder="Klasör (opsiyonel, örn. Karakterler)" style="flex:1;min-width:160px">
+          <input class="field" id="t-text" placeholder="Yeni görev…" maxlength="90" style="flex:2;min-width:200px">
           <div class="rolepick" style="margin:0" id="t-tags">
             <span class="rp" data-r="animation">animation</span>
             <span class="rp" data-r="script">script</span>
@@ -670,6 +675,7 @@ $$('nav .tab').forEach(b=>b.addEventListener('click',()=>{
   $$('.page').forEach(p=>p.classList.remove('show'));
   $('#p-'+b.dataset.p).classList.add('show');
   if(b.dataset.p==='chat')initChat(); // ilk açılışta selamı göster — API çağrısı YOK
+  if(b.dataset.p==='projects')seedDreamLeagueOnce(); // sadece proje yoksa bir kere oluşturur
 }));
 $('#me-chip').addEventListener('click',e=>{
   e.stopPropagation();
@@ -863,6 +869,70 @@ function startParticles(){
   },340);
 }
 
+/* ---------- Dream League — Notion'dan aktarılan karakter listesi ----------
+   "styles to do" (yeni stil tasarımı bekleyenler) ve "update styles"
+   (rework/mastery bekleyenler) veritabanlarından çekildi. */
+const DREAM_LEAGUE_CHARACTERS=[
+  // Klasör: Yeni Stil Tasarımları (Notion "styles to do")
+  {folder:'Yeni Stil Tasarımları',name:'Carles Puyol',status:'In progress',pos:'Defender, Stopper'},
+  {folder:'Yeni Stil Tasarımları',name:'Cristiano Ronaldo',status:'In progress',pos:'Attacker, Striker'},
+  {folder:'Yeni Stil Tasarımları',name:'Dani Alves',status:'Later',pos:'Defender, Wingback'},
+  {folder:'Yeni Stil Tasarımları',name:'Filippo Inzaghi (rework)',status:'In progress',pos:'Attacker, Striker'},
+  {folder:'Yeni Stil Tasarımları',name:'Gareth Bale',status:'Later',pos:'Attacker'},
+  {folder:'Yeni Stil Tasarımları',name:'Kylian Mbappe',status:'In progress',pos:'Attacker, Winger'},
+  {folder:'Yeni Stil Tasarımları',name:'Luka Modric',status:'In progress',pos:'Midfielder'},
+  {folder:'Yeni Stil Tasarımları',name:'Marcelo',status:'In progress',pos:'Midfielder'},
+  {folder:'Yeni Stil Tasarımları',name:'Mesut Özil',status:'Later',pos:'Midfielder'},
+  {folder:'Yeni Stil Tasarımları',name:'Neymar Jr.',status:'Later',pos:'Attacker, Striker, Winger'},
+  {folder:'Yeni Stil Tasarımları',name:'Sergio Busquets',status:'Later',pos:'Midfielder'},
+  {folder:'Yeni Stil Tasarımları',name:'Victor Valdes',status:'Later',pos:'Goalie'},
+  // Klasör: Karakter Rework / Mastery (Notion "update styles")
+  {folder:'Karakter Rework / Mastery',name:'Andrea Pirlo',status:'To do',pos:'Attacker, Midfielder'},
+  {folder:'Karakter Rework / Mastery',name:'Antonio Rüdiger',status:'To do',pos:'Defender, Stopper'},
+  {folder:'Karakter Rework / Mastery',name:'Arjen Robben',status:'To do',pos:'Attacker, Winger'},
+  {folder:'Karakter Rework / Mastery',name:'Cristiano Ronaldo (MASTERY)',status:'To do',pos:'Attacker, Winger'},
+  {folder:'Karakter Rework / Mastery',name:'Dennis Bergkamp',status:'To do',pos:'Striker, Midfielder, Attacker'},
+  {folder:'Karakter Rework / Mastery',name:'Didier Drogba',status:'To do',pos:'Attacker, Striker'},
+  {folder:'Karakter Rework / Mastery',name:'Eden Hazard',status:'To do',pos:'Midfielder, Attacker'},
+  {folder:'Karakter Rework / Mastery',name:'Fernando Torres',status:'To do',pos:'Attacker, Winger'},
+  {folder:'Karakter Rework / Mastery',name:'Filippo Inzaghi (reworked/mastery)',status:'To do',pos:'Attacker, Striker'},
+  {folder:'Karakter Rework / Mastery',name:'Hakan Çalhanoğlu',status:'To do',pos:'Midfielder, Attacker'},
+  {folder:'Karakter Rework / Mastery',name:'Joshua Kimmich',status:'To do',pos:'Midfielder, Defender'},
+  {folder:'Karakter Rework / Mastery',name:'Jude Bellingham',status:'To do',pos:'Midfielder, Attacker'},
+  {folder:'Karakter Rework / Mastery',name:'Kaká',status:'To do',pos:'Attacker, Midfielder'},
+  {folder:'Karakter Rework / Mastery',name:'Lewandowski',status:'To do',pos:'Attacker, Striker'},
+  {folder:'Karakter Rework / Mastery',name:'Lionel Messi',status:'To do',pos:'Attacker, Midfielder'},
+  {folder:'Karakter Rework / Mastery',name:'Ousmane Dembele',status:'To do',pos:'Attacker, Striker, Winger'},
+  {folder:'Karakter Rework / Mastery',name:'Pedri',status:'To do',pos:'Midfielder, Attacker'},
+  {folder:'Karakter Rework / Mastery',name:'Ricardo Quaresma',status:'To do',pos:'Attacker, Winger'},
+  {folder:'Karakter Rework / Mastery',name:'Thomas Müller',status:'To do',pos:'Attacker, Midfielder'},
+  {folder:'Karakter Rework / Mastery',name:'Xavi',status:'To do',pos:'Midfielder, Attacker'},
+  {folder:'Karakter Rework / Mastery',name:'Zinedine Zidane',status:'To do',pos:'Attacker, Winger'},
+];
+
+let dreamLeagueSeeded=false;
+async function seedDreamLeagueOnce(){
+  if(dreamLeagueSeeded)return; dreamLeagueSeeded=true;
+  if(!state.me.roles.includes('admin'))return; // sadece admin oluşturabilir (proje oluşturma yetkisiyle tutarlı)
+  if(state.projects.some(p=>p.name==='Dream League'))return; // zaten var, tekrar ekleme
+  const proj={id:Date.now(),name:'Dream League',by:state.me.name,createdAt:Date.now()};
+  state.projects.push(proj);
+  DREAM_LEAGUE_CHARACTERS.forEach((c,i)=>{
+    state.todos.push({
+      id:Date.now()+i+1,
+      text:`${c.name} — ${c.status} (${c.pos})`,
+      tags:['animation','script'],
+      done:false,
+      projectId:proj.id,
+      folder:c.folder,
+    });
+  });
+  await sSet('bro:projects',state.projects);
+  await sSet('bro:todos',state.todos);
+  renderProjects();
+  toast('Dream League projesi ve '+DREAM_LEAGUE_CHARACTERS.length+' karakter eklendi ✓');
+}
+
 /* ---------- projects ---------- */
 function renderProjects(){
   $('#proj-new').style.display=state.me.roles.includes('admin')?'flex':'none';
@@ -933,15 +1003,42 @@ $('#t-tags').addEventListener('click',e=>{
 });
 $('#t-go').addEventListener('click',async()=>{
   const t=$('#t-text').value.trim();
+  const folder=$('#t-folder').value.trim();
   if(!t){toast('Görev metni boş olamaz.');return}
   if(!state.currentProject){toast('Önce bir proje seç.');return}
-  state.todos.push({id:Date.now(),text:t,tags:[...newTags],done:false,projectId:state.currentProject});
+  state.todos.push({id:Date.now(),text:t,tags:[...newTags],done:false,projectId:state.currentProject,folder:folder||null});
   await sSet('bro:todos',state.todos);
-  $('#t-text').value=''; newTags.clear(); $$('#t-tags .rp').forEach(x=>x.classList.remove('on'));
+  $('#t-text').value=''; $('#t-folder').value=''; newTags.clear(); $$('#t-tags .rp').forEach(x=>x.classList.remove('on'));
   renderTodos(); renderProjects(); toast('Görev eklendi ✓');
 });
 
 function myTagMatch(td){return (td.tags||[]).some(tg=>state.me.roles.includes(TAG2ROLE[tg]))}
+
+function buildTodoItem(td,canDelete){
+  const tags=Array.isArray(td.tags)?td.tags:[];
+  const it=document.createElement('div'); it.className='todo-item glass'+(td.done?' done':''); it.dataset.id=td.id;
+  const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||tags.length===0;
+  const chk=document.createElement('button'); chk.className='chk'+(td.done?' done':'')+(canCheck?'':' locked');
+  chk.textContent='✓'; chk.title=canCheck?'':'Bu tag senin rolünde değil';
+  if(canCheck&&!td.done)chk.addEventListener('click',()=>completeTodo(td,it));
+  const tx=document.createElement('div'); tx.className='todo-txt'; tx.textContent=td.text;
+  const tg=document.createElement('div'); tg.className='tags';
+  tags.forEach(t=>{const s=document.createElement('span');s.className='tag'+(state.me.roles.includes(TAG2ROLE[t])?' mine':'');s.textContent=t;tg.appendChild(s)});
+  it.append(chk,tx,tg);
+  if(canDelete){
+    const del=document.createElement('button'); del.textContent='✕'; del.title='Görevi kaldır';
+    del.style.cssText='background:transparent;border:none;color:var(--ink-faint);cursor:pointer;font-size:1rem;padding:4px 8px;flex:none';
+    del.addEventListener('click',async ev=>{
+      ev.stopPropagation();
+      if(!confirm('Bu görevi kaldırmak istediğine emin misin?'))return;
+      state.todos=state.todos.filter(x=>x!==td);
+      await sSet('bro:todos',state.todos);
+      renderTodos(); renderProjects(); toast('Görev kaldırıldı');
+    });
+    it.appendChild(del);
+  }
+  return it;
+}
 
 function renderTodos(){
   if(!state.currentProject)return; // proje seçili değilse (proje listesi görünümündeyiz) çizecek bir şey yok
@@ -951,30 +1048,18 @@ function renderTodos(){
   if(todoTab==='kisisel')list=list.filter(td=>!td.done&&myTagMatch(td));
   if(!list.length){L.innerHTML=`<div class="empty glass">${todoTab==='kisisel'?'Sana atanmış açık görev yok. Kral gibisin 👑':'Bu projede henüz görev yok.'}</div>`;return}
   const canDelete=adminMode&&state.me.roles.includes('admin');
-  list.forEach(td=>{
-    const tags=Array.isArray(td.tags)?td.tags:[];
-    const it=document.createElement('div'); it.className='todo-item glass'+(td.done?' done':''); it.dataset.id=td.id;
-    const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||tags.length===0;
-    const chk=document.createElement('button'); chk.className='chk'+(td.done?' done':'')+(canCheck?'':' locked');
-    chk.textContent='✓'; chk.title=canCheck?'':'Bu tag senin rolünde değil';
-    if(canCheck&&!td.done)chk.addEventListener('click',()=>completeTodo(td,it));
-    const tx=document.createElement('div'); tx.className='todo-txt'; tx.textContent=td.text;
-    const tg=document.createElement('div'); tg.className='tags';
-    tags.forEach(t=>{const s=document.createElement('span');s.className='tag'+(state.me.roles.includes(TAG2ROLE[t])?' mine':'');s.textContent=t;tg.appendChild(s)});
-    it.append(chk,tx,tg);
-    if(canDelete){
-      const del=document.createElement('button'); del.textContent='✕'; del.title='Görevi kaldır';
-      del.style.cssText='background:transparent;border:none;color:var(--ink-faint);cursor:pointer;font-size:1rem;padding:4px 8px;flex:none';
-      del.addEventListener('click',async ev=>{
-        ev.stopPropagation();
-        if(!confirm('Bu görevi kaldırmak istediğine emin misin?'))return;
-        state.todos=state.todos.filter(x=>x!==td);
-        await sSet('bro:todos',state.todos);
-        renderTodos(); renderProjects(); toast('Görev kaldırıldı');
-      });
-      it.appendChild(del);
-    }
-    L.appendChild(it);
+
+  // klasörsüz görevler önce (varsa), sonra klasörler alfabetik
+  const noFolder=list.filter(td=>!td.folder);
+  const folders=[...new Set(list.filter(td=>td.folder).map(td=>td.folder))].sort((a,b)=>a.localeCompare(b,'tr'));
+
+  noFolder.forEach(td=>L.appendChild(buildTodoItem(td,canDelete)));
+  folders.forEach(f=>{
+    const items=list.filter(td=>td.folder===f);
+    const head=document.createElement('div'); head.className='folder-head';
+    head.innerHTML=`<span class="ic">📁</span> ${esc(f)} <span class="folder-count">${items.filter(t=>t.done).length}/${items.length}</span>`;
+    L.appendChild(head);
+    items.forEach(td=>L.appendChild(buildTodoItem(td,canDelete)));
   });
 }
 
