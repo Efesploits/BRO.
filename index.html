@@ -175,6 +175,15 @@ body.tuna .ember{background:#ff7ab8}
 
 /* ---------- announcements ---------- */
 .ann{padding:20px 22px;margin-bottom:14px}
+
+/* ---------- chat with bro ---------- */
+.chat-msg{max-width:78%;padding:11px 15px;border-radius:16px;font-size:.88rem;line-height:1.5;word-break:break-word}
+.chat-msg.bro{align-self:flex-start;background:var(--glass-hi);border:1px solid var(--stroke);border-bottom-left-radius:4px}
+.chat-msg.me{align-self:flex-end;background:var(--ink);color:var(--bg);border-bottom-right-radius:4px}
+body.tuna .chat-msg.me{background:var(--accent);color:#fff}
+.chat-msg.typing{display:flex;gap:4px;align-items:center;padding:13px 16px}
+.chat-msg.typing i{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);animation:eq .9s ease-in-out infinite}
+.chat-msg.typing i:nth-child(2){animation-delay:.15s}.chat-msg.typing i:nth-child(3){animation-delay:.3s}
 .ann .head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .ann .who{font-weight:700;font-size:.9rem}
 .ann .when{font-size:.7rem;color:var(--ink-faint);margin-left:auto}
@@ -231,6 +240,7 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
       <nav>
         <button class="tab active" data-p="home">Ana Sayfa</button>
         <button class="tab" data-p="projects">Projeler</button>
+        <button class="tab" data-p="chat">Chat with BRO</button>
         <button class="tab" data-p="ann">Duyurular</button>
         <button class="tab" data-p="prof">Profil</button>
         <button class="tab" data-p="together">Together</button>
@@ -283,6 +293,19 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
           <button class="btn" id="t-go">Ekle</button>
         </div>
       </div>
+    </section>
+
+    <!-- CHAT WITH BRO -->
+    <section class="page" id="p-chat">
+      <h2 class="sec">Chat with BRO</h2>
+      <div class="glass" style="padding:0;display:flex;flex-direction:column;height:min(560px,70vh);overflow:hidden">
+        <div id="chat-log" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px"></div>
+        <div style="display:flex;gap:10px;padding:14px;border-top:1px solid var(--stroke)">
+          <input class="field" id="chat-input" placeholder="bro'ya bir şey yaz…" style="margin:0" maxlength="500">
+          <button class="btn" id="chat-send">Gönder</button>
+        </div>
+      </div>
+      <div class="hint" id="chat-hint" style="margin-top:10px"></div>
     </section>
 
     <!-- ANNOUNCEMENTS -->
@@ -374,6 +397,18 @@ const FIREBASE_CONFIG={
   appId: "1:797123819794:web:b41d21eb5083fd41f41bcb",
   measurementId: "G-9QN4ESJ3LS"
 };
+
+/* ====== CHAT WITH BRO KURULUMU ======
+   Bu bir Claude/Sonnet sohbeti — gerçek bir AI API'sini çağırıyor, dolayısıyla
+   API anahtarının GİZLİ kalması gerekiyor (tarayıcıya asla konulmaz). Bunun için
+   ücretsiz bir Cloudflare Worker'a ihtiyaç var (ara sunucu, anahtarı orada saklar):
+   1) workers.cloudflare.com → ücretsiz hesap aç → "Create Worker"
+   2) Sana ayrıca verdiğim worker.js kodunu yapıştır, "Deploy" de
+   3) Worker → Settings → Variables and Secrets → ANTHROPIC_API_KEY adında
+      bir "Secret" ekle, değeri console.anthropic.com'dan aldığın API anahtarı olsun
+   4) Sana verilen worker adresini (https://xxx.workers.dev) aşağıya yapıştır.
+   Boş kalırsa "Chat with BRO" sekmesi açılır ama mesaj gönderilemez.          */
+const BRO_CHAT_WORKER_URL="";
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
@@ -635,6 +670,7 @@ $$('nav .tab').forEach(b=>b.addEventListener('click',()=>{
   $$('nav .tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
   $$('.page').forEach(p=>p.classList.remove('show'));
   $('#p-'+b.dataset.p).classList.add('show');
+  if(b.dataset.p==='chat')initChat(); // ilk açılışta selamı göster — API çağrısı YOK
 }));
 $('#me-chip').addEventListener('click',e=>{
   e.stopPropagation();
@@ -1048,6 +1084,70 @@ $('#pf-save').addEventListener('click',async()=>{
   await sSet('bro:members',state.members);
   renderAll(); toast('Profilin kaydedildi ✨');
 });
+
+/* ---------- chat with bro ---------- */
+let chatHistory=[]; // {role:'user'|'assistant', content:'...'} — sadece bu oturumda, API'ye gönderilecek geçmiş
+let chatInited=false;
+
+function initChat(){
+  if(chatInited)return; // tekrar tekrar "wsg bro" basmasın
+  chatInited=true;
+  const hint=$('#chat-hint');
+  hint.textContent=BRO_CHAT_WORKER_URL?'':'⚠ Chat henüz kurulmadı — sohbet sunucusu adresi eklenmemiş. Bu sekme sadece görünüyor, mesaj gönderemezsin.';
+  addChatBubble('bro','wsg bro');
+}
+
+function addChatBubble(who,text){
+  const log=$('#chat-log');
+  const b=document.createElement('div'); b.className='chat-msg '+(who==='me'?'me':'bro');
+  b.textContent=text;
+  log.appendChild(b);
+  log.scrollTop=log.scrollHeight;
+  return b;
+}
+
+function buildProjectContext(){
+  if(!state.projects.length)return 'Henüz hiç proje yok.';
+  return state.projects.map(p=>{
+    const items=state.todos.filter(t=>t.projectId===p.id);
+    const done=items.filter(t=>t.done).length;
+    const openList=items.filter(t=>!t.done).slice(0,8).map(t=>'- '+t.text+(t.tags&&t.tags.length?' ['+t.tags.join(', ')+']':'')).join('\n');
+    return `Proje: ${p.name} (${done}/${items.length} tamamlandı)\n${openList||'(açık görev yok)'}`;
+  }).join('\n\n');
+}
+
+async function sendChatMessage(){
+  const input=$('#chat-input');
+  const text=input.value.trim();
+  if(!text)return;
+  if(!BRO_CHAT_WORKER_URL){toast('Chat sunucusu henüz kurulmadı.');return}
+  addChatBubble('me',text);
+  chatHistory.push({role:'user',content:text});
+  input.value=''; input.disabled=true; $('#chat-send').disabled=true;
+  const typing=document.createElement('div'); typing.className='chat-msg bro typing';
+  typing.innerHTML='<i></i><i></i><i></i>';
+  $('#chat-log').appendChild(typing); $('#chat-log').scrollTop=$('#chat-log').scrollHeight;
+  try{
+    const r=await fetch(BRO_CHAT_WORKER_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:chatHistory,context:buildProjectContext(),user:state.me.name})
+    });
+    if(!r.ok)throw new Error('sunucu hatası');
+    const data=await r.json();
+    typing.remove();
+    const reply=(data.reply||'').trim()||'…';
+    addChatBubble('bro',reply);
+    chatHistory.push({role:'assistant',content:reply});
+  }catch(e){
+    typing.remove();
+    addChatBubble('bro','bağlanamadım bro, worker ayarlarına bi bak 🥲');
+  }finally{
+    input.disabled=false; $('#chat-send').disabled=false; input.focus();
+  }
+}
+$('#chat-send').addEventListener('click',sendChatMessage);
+$('#chat-input').addEventListener('keydown',e=>{ if(e.key==='Enter')sendChatMessage(); });
 
 /* ---------- toast ---------- */
 let toastT;
