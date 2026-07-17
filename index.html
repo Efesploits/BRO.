@@ -183,7 +183,7 @@ body.tuna .ember{background:#ff7ab8}
 textarea.field{resize:vertical;min-height:80px}
 
 /* ---------- profile ---------- */
-.prof{padding:26px;max-width:560px}
+.prof{padding:26px;max-width:560px;overflow:hidden}
 .frow{margin-bottom:20px}
 .frow label{display:block;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px}
 select.field{appearance:none}
@@ -302,7 +302,14 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
     <section class="page" id="p-prof">
       <h2 class="sec">Profil</h2>
       <div class="prof glass">
+        <div id="pf-banner-wrap" style="margin:-26px -26px 20px;height:130px;background:rgba(255,255,255,.05);position:relative">
+          <img id="pf-banner-img" style="width:100%;height:100%;object-fit:cover;display:none">
+        </div>
         <div id="pf-head" style="display:flex;align-items:center;gap:14px;margin-bottom:24px"></div>
+        <div class="frow">
+          <label>Banner görseli (URL)</label>
+          <input class="field" id="pf-banner" placeholder="https://… (bir görsel linki yapıştır)">
+        </div>
         <div class="frow">
           <label>Kullanıcı adı fontu</label>
           <select class="field" id="pf-font">
@@ -453,7 +460,7 @@ async function loginAs(name,discordId,avatarUrl,rawUser){
   let m=state.members.find(x=>x.name.toLowerCase()===name.toLowerCase());
   if(!m){
     m={name,discordId:discordId||null,discordUser:rawUser||null,avatarUrl:avatarUrl||null,
-       roles:['arkadas'],status:'online',act:null,
+       roles:['arkadas'],status:'online',music:null,game:null,banner:null,
        style:{font:"'Space Grotesk',sans-serif",mode:'static',c1:'#ffffff'}};
     state.members.push(m);
   }else{
@@ -514,16 +521,22 @@ $('#l-discord').addEventListener('click',()=>{
    Aktivitenin görünmesi için önce discord.gg/lanyard sunucusuna katıl. */
 let lanyardWS=null, lanyardHB=null;
 
+function gameImageUrl(activity){
+  const img=activity&&activity.assets&&activity.assets.large_image;
+  if(!img)return null;
+  if(img.startsWith('mp:'))return 'https://media.discordapp.net/'+img.slice(3);
+  if(activity.application_id)return `https://cdn.discordapp.com/app-assets/${activity.application_id}/${img}.png`;
+  return null;
+}
+
 function applyPresence(m,d){
   if(!d)return;
   m.status=d.discord_status==='dnd'?'idle':(d.discord_status||'offline');
   if(!['online','idle','offline'].includes(m.status))m.status='online';
-  if(d.spotify){
-    m.act={type:'music',t1:d.spotify.song,t2:d.spotify.artist+' · Spotify',ic:'🎧'};
-  }else{
-    const g=(d.activities||[]).find(a=>a.type===0);
-    m.act=g?{type:'game',t1:g.name,t2:g.details||g.state||'oyunda',ic:'🎮'}:null;
-  }
+  /* müzik ve oyun birbirinden bağımsız — ikisi de aynı anda olabilir */
+  m.music=d.spotify?{song:d.spotify.song,artist:d.spotify.artist,cover:d.spotify.album_art_url||null}:null;
+  const g=(d.activities||[]).find(a=>a.type===0);
+  m.game=g?{name:g.name,detail:g.details||g.state||'oyunda',cover:gameImageUrl(g)}:null;
 }
 
 function subscribeLanyardIds(){
@@ -672,6 +685,25 @@ function renderMeChip(){
 }
 
 /* ---------- members ---------- */
+function activityRow(coverUrl,fallbackIcon,title,subtitle,showEq){
+  const act=document.createElement('div'); act.className='activity';
+  function iconSpan(){const s=document.createElement('span');s.className='ic';s.textContent=fallbackIcon;return s;}
+  if(coverUrl){
+    const img=document.createElement('img'); img.src=coverUrl; img.alt='';
+    img.style.cssText='width:38px;height:38px;border-radius:8px;object-fit:cover;flex:none';
+    img.onerror=()=>{img.replaceWith(iconSpan())};
+    act.appendChild(img);
+  }else{
+    act.appendChild(iconSpan());
+  }
+  const textWrap=document.createElement('div');
+  const t1=document.createElement('div'); t1.className='t1'; t1.textContent=title;
+  const t2=document.createElement('div'); t2.className='t2'; t2.textContent=subtitle;
+  textWrap.append(t1,t2); act.appendChild(textWrap);
+  if(showEq){const eq=document.createElement('span'); eq.className='eq'; eq.innerHTML='<i></i><i></i><i></i>'; act.appendChild(eq);}
+  return act;
+}
+
 function renderMembers(){
   updateAdminModeBtn();
   const g=$('#members'); g.innerHTML='';
@@ -682,6 +714,15 @@ function renderMembers(){
   const order={online:0,idle:1,offline:2};
   [...state.members].sort((a,b)=>order[a.status]-order[b.status]).forEach(m=>{
     const card=document.createElement('div'); card.className='card glass'; card.dataset.status=m.status;
+    if(m.banner){
+      const banWrap=document.createElement('div');
+      banWrap.style.cssText='margin:-20px -20px 14px;height:80px;overflow:hidden;position:relative;background:rgba(255,255,255,.05)';
+      const banImg=document.createElement('img'); banImg.src=m.banner; banImg.alt='';
+      banImg.style.cssText='width:100%;height:100%;object-fit:cover;display:block';
+      banImg.onerror=()=>{banWrap.remove()};
+      banWrap.appendChild(banImg);
+      card.appendChild(banWrap);
+    }
     const ptc=document.createElement('div'); ptc.className='ptc';
     const row=document.createElement('div'); row.className='mrow';
     const ava=makeAva(m,52);
@@ -691,12 +732,10 @@ function renderMembers(){
     const rl=document.createElement('div'); rl.className='roles';
     m.roles.forEach(r=>{const b=document.createElement('span');b.className='badge'+(r==='admin'?' admin':'');b.textContent=r==='arkadas'?'arkadaş':r;rl.appendChild(b)});
     info.append(un,rl); row.append(ava,info); card.append(ptc,row);
-    if(m.status!=='offline'&&m.act){
-      const act=document.createElement('div'); act.className='activity';
-      act.innerHTML=`<span class="ic">${m.act.ic}</span><div><div class="t1">${esc(m.act.t1)}</div><div class="t2">${m.act.type==='music'?'🎵 dinliyor · ':'oynuyor · '}${esc(m.act.t2)}</div></div>`;
-      if(m.act.type==='music'){const eq=document.createElement('span');eq.className='eq';eq.innerHTML='<i></i><i></i><i></i>';act.appendChild(eq)}
-      card.appendChild(act);
-    }else if(m.status==='offline'){
+    if(m.status!=='offline'){
+      if(m.music)card.appendChild(activityRow(m.music.cover,'🎧',m.music.song,'🎵 dinliyor · '+m.music.artist,true));
+      if(m.game)card.appendChild(activityRow(m.game.cover,'🎮',m.game.name,'oynuyor · '+m.game.detail,false));
+    }else{
       const off=document.createElement('div'); off.className='offline-note'; off.textContent='Çevrimdışı · en son bugün görüldü'; card.appendChild(off);
     }
     if(adminMode&&state.me.roles.includes('admin')){
@@ -932,8 +971,10 @@ function initProfile(){
   const rolesTxt=state.me.roles.map(r=>r==='arkadas'?'arkadaş':r).join(' · ');
   info.innerHTML=`<div style="font-weight:700;font-size:1.1rem">${esc(state.me.name)}</div>
     <div style="font-size:.78rem;color:var(--ink-dim);margin-top:3px">${rolesTxt}</div>
-    <div style="font-size:.72rem;color:var(--ink-faint);margin-top:2px">${state.me.discordId?'Discord hesabı bağlı ✓':'Demo giriş — Discord bağlı değil'}</div>`;
+    <div style="font-size:.72rem;color:var(--ink-faint);margin-top:2px">${state.me.discordId?'Discord hesabı bağlı ✓':'Discord bağlı değil'}</div>`;
   head.appendChild(info);
+  $('#pf-banner').value=state.me.banner||'';
+  updateBannerPreview(state.me.banner);
   const st=state.me.style;
   $('#pf-font').value=st.font;
   $('#pf-c1').value=st.c1||'#ffffff'; $('#pf-c2').value=st.c2||'#888888';
@@ -941,6 +982,16 @@ function initProfile(){
   $('#c2wrap').style.display=st.mode==='gradient'?'block':'none';
   updatePreview();
 }
+function updateBannerPreview(url){
+  const img=$('#pf-banner-img');
+  if(url){
+    img.src=url; img.style.display='block';
+    img.onerror=()=>{img.style.display='none'};
+  }else{
+    img.removeAttribute('src'); img.style.display='none';
+  }
+}
+$('#pf-banner').addEventListener('input',e=>updateBannerPreview(e.target.value.trim()));
 $('#pf-mode').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b)return;
   $$('#pf-mode button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
@@ -959,9 +1010,11 @@ function updatePreview(){
 }
 $('#pf-save').addEventListener('click',async()=>{
   state.me.style=currentStyle();
-  const m=state.members.find(x=>x.name===state.me.name); if(m)m.style=state.me.style;
+  state.me.banner=$('#pf-banner').value.trim()||null;
+  const m=state.members.find(x=>x.name===state.me.name);
+  if(m){ m.style=state.me.style; m.banner=state.me.banner; }
   await sSet('bro:members',state.members);
-  renderAll(); toast('Stilin kaydedildi ✨');
+  renderAll(); toast('Profilin kaydedildi ✨');
 });
 
 /* ---------- toast ---------- */
