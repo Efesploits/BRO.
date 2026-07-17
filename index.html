@@ -230,7 +230,7 @@ body.tuna .seg button.on{background:var(--accent);color:#fff}
     </div>
     <button class="btn" id="l-discord" style="width:100%;justify-content:center;margin-bottom:10px">⌁ Discord ile Giriş</button>
     <button class="btn ghost" id="l-go" style="width:100%;justify-content:center">Demo giriş (kullanıcı adıyla)</button>
-    <div class="hint" id="l-hint">Admin rolü seçilemez — sadece belirli Discord hesaplarına otomatik verilir.</div>
+    <div class="hint" id="l-hint">Admin rolü seçilemez — sadece belirli Discord hesaplarına otomatik verilir.<br>Aktivitenin (oyun/müzik) görünmesi için <a href="https://discord.gg/lanyard" target="_blank" style="color:var(--ink)">discord.gg/lanyard</a> sunucusuna bir kere katılman gerekiyor.</div>
   </div>
 
   <!-- APP -->
@@ -337,12 +337,16 @@ const ADMINS=['m3fxn','tunaneymar_'];   // sadece bu Discord kullanıcı adları
    4) Sana verilen firebaseConfig objesini aşağıya AYNEN yapıştır.
    Boş (null) kalırsa site yine çalışır ama veriler sadece kendi
    tarayıcında saklanır — ekip birbirini göremez.                      */
-const FIREBASE_CONFIG=null; /* örn:
 const FIREBASE_CONFIG={
-  apiKey:"...", authDomain:"bro-xxxx.firebaseapp.com",
-  databaseURL:"https://bro-xxxx-default-rtdb.firebaseio.com",
-  projectId:"bro-xxxx", storageBucket:"...", messagingSenderId:"...", appId:"..."
-}; */
+  apiKey: "AIzaSyD6jXt4CTMaZgAUVJYsBUJDaNRizXtp2EQ",
+  authDomain: "broo-e918c.firebaseapp.com",
+  databaseURL: "https://broo-e918c-default-rtdb.firebaseio.com",
+  projectId: "broo-e918c",
+  storageBucket: "broo-e918c.firebasestorage.app",
+  messagingSenderId: "797123819794",
+  appId: "1:797123819794:web:b41d21eb5083fd41f41bcb",
+  measurementId: "G-9QN4ESJ3LS"
+};
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
@@ -379,6 +383,7 @@ function subscribeLive(){
     db.ref(FKEY(k)).on('value',snap=>{
       if(!snap.exists())return;
       state[st]=snap.val()||[];
+      if(st==='members')subscribeLanyardIds(); // yeni Discord kullanıcısı gelmiş olabilir
       if(state.me){
         const me=state.members.find(x=>x.name.toLowerCase()===state.me.name.toLowerCase());
         if(me)state.me=me;
@@ -497,31 +502,56 @@ $('#l-discord').addEventListener('click',()=>{
   }catch(e){toast('Discord girişi başarısız oldu, tekrar dene.')}
 })();
 
-/* ---------- gerçek aktivite: Lanyard ---------- */
-async function refreshPresence(){
-  const targets=state.members.filter(m=>m.discordId);
-  for(const m of targets){
-    try{
-      const r=await fetch('https://api.lanyard.rest/v1/users/'+m.discordId);
-      if(!r.ok)continue;
-      const d=(await r.json()).data;
-      m.status=d.discord_status==='dnd'?'idle':(d.discord_status||'offline');
-      if(m.status!=='online'&&m.status!=='idle'&&m.status!=='offline')m.status='online';
-      if(d.spotify){
-        m.act={type:'music',t1:d.spotify.song,t2:d.spotify.artist+' · Spotify',ic:'🎧'};
-      }else{
-        const g=(d.activities||[]).find(a=>a.type===0);
-        m.act=g?{type:'game',t1:g.name,t2:g.details||g.state||'oyunda',ic:'🎮'}:null;
-      }
-    }catch(e){/* Lanyard'a kayıtlı değil veya ağ engelli — sessizce geç */}
+/* ---------- gerçek aktivite: Lanyard (WebSocket = anlık) ----------
+   NOT: Lanyard sadece kendi Discord sunucusuna üye olan kişileri izler.
+   Aktivitenin görünmesi için önce discord.gg/lanyard sunucusuna katıl. */
+let lanyardWS=null, lanyardHB=null;
+
+function applyPresence(m,d){
+  if(!d)return;
+  m.status=d.discord_status==='dnd'?'idle':(d.discord_status||'offline');
+  if(!['online','idle','offline'].includes(m.status))m.status='online';
+  if(d.spotify){
+    m.act={type:'music',t1:d.spotify.song,t2:d.spotify.artist+' · Spotify',ic:'🎧'};
+  }else{
+    const g=(d.activities||[]).find(a=>a.type===0);
+    m.act=g?{type:'game',t1:g.name,t2:g.details||g.state||'oyunda',ic:'🎮'}:null;
   }
-  await sSet('bro:members',state.members);
-  if(state.me)renderMembers();
 }
-function startPresencePolling(){
-  if(window._presInt)clearInterval(window._presInt);
-  refreshPresence();
-  window._presInt=setInterval(refreshPresence,30000);
+
+function subscribeLanyardIds(){
+  const ids=state.members.filter(m=>m.discordId).map(m=>m.discordId);
+  if(lanyardWS&&lanyardWS.readyState===WebSocket.OPEN&&ids.length){
+    lanyardWS.send(JSON.stringify({op:2,d:{subscribe_to_ids:ids}}));
+  }
+}
+
+function startPresencePolling(){ // isim korunuyor, artık WebSocket başlatıyor
+  if(lanyardWS)return; // zaten bağlı/bağlanıyor
+  try{
+    lanyardWS=new WebSocket('wss://api.lanyard.rest/socket');
+  }catch(e){return}
+  lanyardWS.onmessage=async ev=>{
+    let msg; try{msg=JSON.parse(ev.data)}catch(e){return}
+    if(msg.op===1){ // Hello: heartbeat başlat, sonra subscribe et
+      clearInterval(lanyardHB);
+      lanyardHB=setInterval(()=>{ if(lanyardWS&&lanyardWS.readyState===WebSocket.OPEN) lanyardWS.send(JSON.stringify({op:3})); },msg.d.heartbeat_interval);
+      subscribeLanyardIds();
+    }else if(msg.op===0&&msg.t==='INIT_STATE'){
+      Object.entries(msg.d||{}).forEach(([id,presence])=>{
+        const m=state.members.find(x=>x.discordId===id);
+        if(m)applyPresence(m,presence);
+      });
+      await sSet('bro:members',state.members);
+      if(state.me)renderMembers();
+    }else if(msg.op===0&&msg.t==='PRESENCE_UPDATE'){
+      const id=msg.d.user_id||msg.d.discord_user&&msg.d.discord_user.id;
+      const m=state.members.find(x=>x.discordId===id);
+      if(m){applyPresence(m,msg.d); await sSet('bro:members',state.members); if(state.me)renderMembers();}
+    }
+  };
+  lanyardWS.onclose=()=>{ clearInterval(lanyardHB); lanyardWS=null; setTimeout(startPresencePolling,4000); }; // koptuysa yeniden bağlan
+  lanyardWS.onerror=()=>{ try{lanyardWS.close()}catch(e){} };
 }
 
 const TUNA=n=>['tuna','tunaneymar_'].includes((n||'').toLowerCase());
