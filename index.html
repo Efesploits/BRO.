@@ -403,6 +403,12 @@ async function sSet(k,v){
   try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}
 }
 
+/* Firebase boş diziyi ({tags:[]}) bazen kaybedip undefined döndürebiliyor —
+   görevleri her okuduğumuzda tags alanını güvenli bir diziye sabitliyoruz. */
+function normalizeTodos(arr){
+  return (arr||[]).map(td=>({...td,tags:Array.isArray(td.tags)?td.tags:[]}));
+}
+
 /* canlı senkron: başka biri girince / görev bitince anında herkese yansır */
 function subscribeLive(){
   if(!db)return;
@@ -410,7 +416,9 @@ function subscribeLive(){
   Object.entries(map).forEach(([k,st])=>{
     db.ref(FKEY(k)).on('value',snap=>{
       if(!snap.exists())return;
-      state[st]=snap.val()||[];
+      let val=snap.val()||[];
+      if(st==='todos')val=normalizeTodos(val);
+      state[st]=val;
       if(st==='members')subscribeLanyardIds(); // yeni Discord kullanıcısı gelmiş olabilir
       if(state.me){
         const me=state.members.find(x=>x.name.toLowerCase()===state.me.name.toLowerCase());
@@ -430,7 +438,7 @@ const SEED_PROJECTS=[];
 /* ---------- boot ---------- */
 async function boot(){
   state.members=await sGet('bro:members',null)||SEED_MEMBERS;
-  state.todos=await sGet('bro:todos',null)||SEED_TODOS;
+  state.todos=normalizeTodos(await sGet('bro:todos',null)||SEED_TODOS);
   state.anns=await sGet('bro:anns',null)||SEED_ANNS;
   state.projects=await sGet('bro:projects',null)||SEED_PROJECTS;
 }
@@ -511,8 +519,7 @@ $('#l-discord').addEventListener('click',()=>{
     const avatarUrl=u.avatar
       ?`https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=128`
       :`https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id)>>22n)%6n}.png`;
-    await loginAs(u.global_name||u.username,u.id,avatarUrl,u.username);
-    refreshPresence(); // Lanyard'dan gerçek aktiviteyi çek
+    await loginAs(u.global_name||u.username,u.id,avatarUrl,u.username); // loginAs içinde WebSocket zaten başlıyor
   }catch(e){toast('Discord girişi başarısız oldu, tekrar dene.')}
 })();
 
@@ -521,22 +528,46 @@ $('#l-discord').addEventListener('click',()=>{
    Aktivitenin görünmesi için önce discord.gg/lanyard sunucusuna katıl. */
 let lanyardWS=null, lanyardHB=null;
 
-function gameImageUrl(activity){
-  const img=activity&&activity.assets&&activity.assets.large_image;
-  if(!img)return null;
-  if(img.startsWith('mp:'))return 'https://media.discordapp.net/'+img.slice(3);
-  if(activity.application_id)return `https://cdn.discordapp.com/app-assets/${activity.application_id}/${img}.png`;
+let detectableAppsCache=null; // {applicationId: iconUrl} — bir kez çekilip önbelleğe alınır
+async function getDetectableApps(){
+  if(detectableAppsCache)return detectableAppsCache;
+  try{
+    const r=await fetch('https://discord.com/api/v10/applications/detectable');
+    if(!r.ok)throw 0;
+    const list=await r.json();
+    const map={};
+    list.forEach(app=>{ if(app.icon)map[app.id]=`https://cdn.discordapp.com/app-icons/${app.id}/${app.icon}.png`; });
+    detectableAppsCache=map;
+  }catch(e){
+    detectableAppsCache={}; // başarısız olursa boş bırak, tekrar tekrar denemesin (ör. CORS engeli)
+  }
+  return detectableAppsCache;
+}
+
+async function gameImageUrl(activity){
+  if(!activity)return null;
+  const img=activity.assets&&activity.assets.large_image;
+  if(img){
+    if(img.startsWith('mp:'))return 'https://media.discordapp.net/'+img.slice(3);
+    if(activity.application_id)return `https://cdn.discordapp.com/app-assets/${activity.application_id}/${img}.png`;
+  }
+  /* çoğu oyunda özel bir kapak resmi (assets) ayarlanmıyor — bu durumda
+     Discord'un o oyun için kullandığı varsayılan uygulama ikonuna düş */
+  if(activity.application_id){
+    const apps=await getDetectableApps();
+    if(apps[activity.application_id])return apps[activity.application_id];
+  }
   return null;
 }
 
-function applyPresence(m,d){
+async function applyPresence(m,d){
   if(!d)return;
   m.status=d.discord_status==='dnd'?'idle':(d.discord_status||'offline');
   if(!['online','idle','offline'].includes(m.status))m.status='online';
   /* müzik ve oyun birbirinden bağımsız — ikisi de aynı anda olabilir */
   m.music=d.spotify?{song:d.spotify.song,artist:d.spotify.artist,cover:d.spotify.album_art_url||null}:null;
   const g=(d.activities||[]).find(a=>a.type===0);
-  m.game=g?{name:g.name,detail:g.details||g.state||'oyunda',cover:gameImageUrl(g)}:null;
+  m.game=g?{name:g.name,detail:g.details||g.state||'oyunda',cover:await gameImageUrl(g)}:null;
 }
 
 function subscribeLanyardIds(){
@@ -558,16 +589,16 @@ function startPresencePolling(){ // isim korunuyor, artık WebSocket başlatıyo
       lanyardHB=setInterval(()=>{ if(lanyardWS&&lanyardWS.readyState===WebSocket.OPEN) lanyardWS.send(JSON.stringify({op:3})); },msg.d.heartbeat_interval);
       subscribeLanyardIds();
     }else if(msg.op===0&&msg.t==='INIT_STATE'){
-      Object.entries(msg.d||{}).forEach(([id,presence])=>{
+      for(const [id,presence] of Object.entries(msg.d||{})){
         const m=state.members.find(x=>x.discordId===id);
-        if(m)applyPresence(m,presence);
-      });
+        if(m)await applyPresence(m,presence);
+      }
       await sSet('bro:members',state.members);
       if(state.me)renderMembers();
     }else if(msg.op===0&&msg.t==='PRESENCE_UPDATE'){
       const id=msg.d.user_id||msg.d.discord_user&&msg.d.discord_user.id;
       const m=state.members.find(x=>x.discordId===id);
-      if(m){applyPresence(m,msg.d); await sSet('bro:members',state.members); if(state.me)renderMembers();}
+      if(m){await applyPresence(m,msg.d); await sSet('bro:members',state.members); if(state.me)renderMembers();}
     }
   };
   lanyardWS.onclose=()=>{ clearInterval(lanyardHB); lanyardWS=null; setTimeout(startPresencePolling,4000); }; // koptuysa yeniden bağlan
@@ -875,7 +906,7 @@ $('#t-go').addEventListener('click',async()=>{
   renderTodos(); renderProjects(); toast('Görev eklendi ✓');
 });
 
-function myTagMatch(td){return td.tags.some(tg=>state.me.roles.includes(TAG2ROLE[tg]))}
+function myTagMatch(td){return (td.tags||[]).some(tg=>state.me.roles.includes(TAG2ROLE[tg]))}
 
 function renderTodos(){
   if(!state.currentProject)return; // proje seçili değilse (proje listesi görünümündeyiz) çizecek bir şey yok
@@ -886,14 +917,15 @@ function renderTodos(){
   if(!list.length){L.innerHTML=`<div class="empty glass">${todoTab==='kisisel'?'Sana atanmış açık görev yok. Kral gibisin 👑':'Bu projede henüz görev yok.'}</div>`;return}
   const canDelete=adminMode&&state.me.roles.includes('admin');
   list.forEach(td=>{
+    const tags=Array.isArray(td.tags)?td.tags:[];
     const it=document.createElement('div'); it.className='todo-item glass'+(td.done?' done':''); it.dataset.id=td.id;
-    const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||td.tags.length===0;
+    const canCheck=todoTab==='kisisel'||myTagMatch(td)||state.me.roles.includes('admin')||tags.length===0;
     const chk=document.createElement('button'); chk.className='chk'+(td.done?' done':'')+(canCheck?'':' locked');
     chk.textContent='✓'; chk.title=canCheck?'':'Bu tag senin rolünde değil';
     if(canCheck&&!td.done)chk.addEventListener('click',()=>completeTodo(td,it));
     const tx=document.createElement('div'); tx.className='todo-txt'; tx.textContent=td.text;
     const tg=document.createElement('div'); tg.className='tags';
-    td.tags.forEach(t=>{const s=document.createElement('span');s.className='tag'+(state.me.roles.includes(TAG2ROLE[t])?' mine':'');s.textContent=t;tg.appendChild(s)});
+    tags.forEach(t=>{const s=document.createElement('span');s.className='tag'+(state.me.roles.includes(TAG2ROLE[t])?' mine':'');s.textContent=t;tg.appendChild(s)});
     it.append(chk,tx,tg);
     if(canDelete){
       const del=document.createElement('button'); del.textContent='✕'; del.title='Görevi kaldır';
