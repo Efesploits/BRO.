@@ -398,17 +398,16 @@ const FIREBASE_CONFIG={
   measurementId: "G-9QN4ESJ3LS"
 };
 
-/* ====== CHAT WITH BRO KURULUMU ======
-   Bu bir Claude/Sonnet sohbeti — gerçek bir AI API'sini çağırıyor, dolayısıyla
-   API anahtarının GİZLİ kalması gerekiyor (tarayıcıya asla konulmaz). Bunun için
-   ücretsiz bir Cloudflare Worker'a ihtiyaç var (ara sunucu, anahtarı orada saklar):
-   1) workers.cloudflare.com → ücretsiz hesap aç → "Create Worker"
-   2) Sana ayrıca verdiğim worker.js kodunu yapıştır, "Deploy" de
-   3) Worker → Settings → Variables and Secrets → ANTHROPIC_API_KEY adında
-      bir "Secret" ekle, değeri console.anthropic.com'dan aldığın API anahtarı olsun
-   4) Sana verilen worker adresini (https://xxx.workers.dev) aşağıya yapıştır.
+/* ====== CHAT WITH BRO KURULUMU (basit sürüm — anahtar doğrudan burada) ======
+   1) aistudio.google.com/apikey → Google hesabınla gir → "Create API key"
+      (kredi kartı istemez, anında bedava anahtar verir)
+   2) Anahtarı aşağıya yapıştır.
+   UYARI: Bu anahtar sitenin kaynak kodunda AÇIK duruyor — "Sayfa Kaynağını
+   Görüntüle" yapan herkes görebilir. Sen bunu bilerek ve onayladın (ücretsiz
+   Gemini anahtarı olduğu için en kötü ihtimalle kotan tükenir, ücret çıkmaz).
    Boş kalırsa "Chat with BRO" sekmesi açılır ama mesaj gönderilemez.          */
-const BRO_CHAT_WORKER_URL="";
+const GEMINI_API_KEY="AQ.Ab8RN6IiMR97WFY55Mt7xJod1KiRogFebP6dZaTo-YcMePr1Eg";
+const GEMINI_MODEL="gemini-2.5-flash";
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
@@ -1093,7 +1092,7 @@ function initChat(){
   if(chatInited)return; // tekrar tekrar "wsg bro" basmasın
   chatInited=true;
   const hint=$('#chat-hint');
-  hint.textContent=BRO_CHAT_WORKER_URL?'':'⚠ Chat henüz kurulmadı — sohbet sunucusu adresi eklenmemiş. Bu sekme sadece görünüyor, mesaj gönderemezsin.';
+  hint.textContent=GEMINI_API_KEY?'':'⚠ Chat henüz kurulmadı — Gemini anahtarı eklenmemiş. Bu sekme sadece görünüyor, mesaj gönderemezsin.';
   addChatBubble('bro','wsg bro');
 }
 
@@ -1116,11 +1115,23 @@ function buildProjectContext(){
   }).join('\n\n');
 }
 
+function chatSystemPrompt(){
+  return [
+    'Sen "BRO" adında, bir Discord ekip yönetim sitesinde ("BRO.") yaşayan rahat, samimi, gündelik konuşan bir arkadaşsın.',
+    'Kısa ve doğal cevaplar ver, gerekmedikçe uzatma. Emoji kullanabilirsin ama abartma.',
+    'ASLA kod yazma. Biri kod, script veya teknik implementasyon isterse nazikçe reddet ve bunun için gerçek bir kodlama aracına (Claude Code gibi) bakmasını söyle.',
+    'Sadece günlük sohbet, ekip, projeler ve görevler hakkında konuş.',
+    'Konuşan kişi: '+state.me.name+'.',
+    'Ekibin güncel proje ve görev durumu (soru gelirse buna göre cevap ver, sormadıkça kendinden bahsetme):',
+    buildProjectContext(),
+  ].join('\n');
+}
+
 async function sendChatMessage(){
   const input=$('#chat-input');
   const text=input.value.trim();
   if(!text)return;
-  if(!BRO_CHAT_WORKER_URL){toast('Chat sunucusu henüz kurulmadı.');return}
+  if(!GEMINI_API_KEY){toast('Gemini anahtarı henüz eklenmedi.');return}
   addChatBubble('me',text);
   chatHistory.push({role:'user',content:text});
   input.value=''; input.disabled=true; $('#chat-send').disabled=true;
@@ -1128,20 +1139,27 @@ async function sendChatMessage(){
   typing.innerHTML='<i></i><i></i><i></i>';
   $('#chat-log').appendChild(typing); $('#chat-log').scrollTop=$('#chat-log').scrollHeight;
   try{
-    const r=await fetch(BRO_CHAT_WORKER_URL,{
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const contents=chatHistory.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+    const r=await fetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages:chatHistory,context:buildProjectContext(),user:state.me.name})
+      body:JSON.stringify({
+        system_instruction:{parts:[{text:chatSystemPrompt()}]},
+        contents,
+        generationConfig:{maxOutputTokens:300,temperature:0.9}
+      })
     });
-    if(!r.ok)throw new Error('sunucu hatası');
+    if(!r.ok)throw new Error('Gemini API hatası: '+r.status);
     const data=await r.json();
     typing.remove();
-    const reply=(data.reply||'').trim()||'…';
+    const cand=(data.candidates||[])[0];
+    const reply=(cand&&cand.content&&cand.content.parts?cand.content.parts.map(p=>p.text||'').join('\n'):'').trim()||'…';
     addChatBubble('bro',reply);
     chatHistory.push({role:'assistant',content:reply});
   }catch(e){
     typing.remove();
-    addChatBubble('bro','bağlanamadım bro, worker ayarlarına bi bak 🥲');
+    addChatBubble('bro','bağlanamadım bro, anahtar veya kota sorunu olabilir 🥲');
   }finally{
     input.disabled=false; $('#chat-send').disabled=false; input.focus();
   }
