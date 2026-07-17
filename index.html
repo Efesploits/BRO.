@@ -6,6 +6,8 @@
 <title>BRO.</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500;800&family=Space+Grotesk:wght@300;400;500;700&family=Pacifico&family=Press+Start+2P&family=Playfair+Display:ital,wght@1,600&family=Monoton&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <style>
 :root{
   --bg:#060607; --bg2:#0d0d10;
@@ -328,21 +330,62 @@ const DISCORD_CLIENT_ID="1527464957757620244";
 const REDIRECT_URI=location.origin+location.pathname;
 const ADMINS=['m3fxn','tunaneymar_'];   // sadece bu Discord kullanıcı adları admin olur
 
+/* ====== FIREBASE KURULUMU (herkesin aynı veriyi görmesi için) ======
+   1) console.firebase.google.com → "Add project" (isim: bro, Analytics kapatabilirsin)
+   2) Soldan Build → Realtime Database → Create Database → test mode ile başlat
+   3) Project settings (⚙️) → altta "Your apps" → Web app (</>) ekle
+   4) Sana verilen firebaseConfig objesini aşağıya AYNEN yapıştır.
+   Boş (null) kalırsa site yine çalışır ama veriler sadece kendi
+   tarayıcında saklanır — ekip birbirini göremez.                      */
+const FIREBASE_CONFIG=null; /* örn:
+const FIREBASE_CONFIG={
+  apiKey:"...", authDomain:"bro-xxxx.firebaseapp.com",
+  databaseURL:"https://bro-xxxx-default-rtdb.firebaseio.com",
+  projectId:"bro-xxxx", storageBucket:"...", messagingSenderId:"...", appId:"..."
+}; */
+
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const ROLES=['animator','scripter','sfx','vfx','arkadas','admin'];
 const TAG2ROLE={animation:'animator',script:'scripter',sfx:'sfx',vfx:'vfx'};
 
 let state={me:null,members:[],todos:[],anns:[]};
-let memFallback={}; // in-memory fallback if storage unavailable
+let db=null;
+if(FIREBASE_CONFIG&&window.firebase){
+  try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database();}
+  catch(e){console.warn('Firebase başlatılamadı:',e)}
+}
+const FKEY=k=>k.replace(':','/'); // bro:members -> bro/members
 
-/* ---------- storage (shared, with fallback) ---------- */
+/* ---------- storage: Firebase > artifact storage > localStorage ---------- */
 async function sGet(k,def){
-  try{const r=await window.storage.get(k,true);return r?JSON.parse(r.value):def}
-  catch(e){return k in memFallback?memFallback[k]:def}
+  if(db){
+    try{const s=await db.ref(FKEY(k)).get();return s.exists()?s.val():def}catch(e){}
+  }
+  try{const r=await window.storage.get(k,true);return r?JSON.parse(r.value):def}catch(e){}
+  try{const v=localStorage.getItem(k);return v?JSON.parse(v):def}catch(e){}
+  return def;
 }
 async function sSet(k,v){
-  memFallback[k]=v;
+  if(db){try{await db.ref(FKEY(k)).set(v)}catch(e){}}
   try{await window.storage.set(k,JSON.stringify(v),true)}catch(e){}
+  try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}
+}
+
+/* canlı senkron: başka biri girince / görev bitince anında herkese yansır */
+function subscribeLive(){
+  if(!db)return;
+  const map={'bro:members':'members','bro:todos':'todos','bro:anns':'anns'};
+  Object.entries(map).forEach(([k,st])=>{
+    db.ref(FKEY(k)).on('value',snap=>{
+      if(!snap.exists())return;
+      state[st]=snap.val()||[];
+      if(state.me){
+        const me=state.members.find(x=>x.name.toLowerCase()===state.me.name.toLowerCase());
+        if(me)state.me=me;
+        renderMembers();renderMeChip();renderTodos();renderAnns();
+      }
+    });
+  });
 }
 
 /* ---------- seed data ---------- */
@@ -355,11 +398,26 @@ async function boot(){
   state.members=await sGet('bro:members',null)||SEED_MEMBERS;
   state.todos=await sGet('bro:todos',null)||SEED_TODOS;
   state.anns=await sGet('bro:anns',null)||SEED_ANNS;
-  await sSet('bro:members',state.members);
-  await sSet('bro:todos',state.todos);
-  await sSet('bro:anns',state.anns);
 }
-boot();
+/* sayfa açılışı: OAuth dönüşü yoksa kayıtlı oturumu geri yükle */
+(async function init(){
+  await boot();
+  if(location.hash.includes('access_token'))return; // OAuth dönüşü kendi girişini yapacak
+  let sess=null;
+  try{sess=localStorage.getItem('bro:session')}catch(e){}
+  if(sess){
+    const m=state.members.find(x=>x.name.toLowerCase()===sess.toLowerCase());
+    if(m){resumeSession(m);return}
+  }
+})();
+function resumeSession(m){
+  m.status='online';
+  state.me=m;
+  sSet('bro:members',state.members);
+  applyTuna(m.name);
+  $('#login').style.display='none'; $('#app').style.display='block';
+  renderAll(); startParticles(); startPresencePolling(); subscribeLive();
+}
 
 /* ---------- login ---------- */
 let pickedRoles=new Set();
@@ -368,28 +426,33 @@ $('#l-roles').addEventListener('click',e=>{
   const r=el.dataset.r;
   el.classList.toggle('on'); el.classList.contains('on')?pickedRoles.add(r):pickedRoles.delete(r);
 });
-async function loginAs(name,discordId,avatarUrl){
+async function loginAs(name,discordId,avatarUrl,rawUser){
   await boot();
   let m=state.members.find(x=>x.name.toLowerCase()===name.toLowerCase());
   if(!m){
     if(pickedRoles.size===0)pickedRoles.add('arkadas');
-    m={name,discordId:discordId||null,avatarUrl:avatarUrl||null,roles:[...pickedRoles],status:'online',
+    m={name,discordId:discordId||null,discordUser:rawUser||null,avatarUrl:avatarUrl||null,
+       roles:[...pickedRoles],status:'online',
        act:discordId?null:{type:'game',t1:'BRO. panosu',t2:'yeni katıldı',ic:'✨'},
        style:{font:"'Space Grotesk',sans-serif",mode:'static',c1:'#ffffff'}};
     state.members.push(m);
   }else{
     m.status='online';
     if(discordId)m.discordId=discordId;
+    if(rawUser)m.discordUser=rawUser;
     if(avatarUrl)m.avatarUrl=avatarUrl;
   }
-  /* admin sadece izin verilen hesaplara — kimse kendine seçemez */
+  /* admin sadece izin verilen hesaplara — kimse kendine seçemez
+     (hem görünen ad hem gerçek Discord kullanıcı adı kontrol edilir) */
+  const idNames=[name.toLowerCase(),(rawUser||m.discordUser||'').toLowerCase()];
   m.roles=m.roles.filter(r=>r!=='admin');
-  if(ADMINS.includes(name.toLowerCase()))m.roles.unshift('admin');
+  if(ADMINS.some(a=>idNames.includes(a)))m.roles.unshift('admin');
   await sSet('bro:members',state.members);
   state.me=m;
-  applyTuna(name);
+  try{localStorage.setItem('bro:session',m.name)}catch(e){}
+  applyTuna(idNames.find(n=>TUNA(n))||name);
   $('#login').style.display='none'; $('#app').style.display='block';
-  renderAll(); startParticles(); startPresencePolling();
+  renderAll(); startParticles(); startPresencePolling(); subscribeLive();
   toast(isTuna()?'Hoş geldin Tuna! 🌸💗':'Hoş geldin, '+m.name+'!');
 }
 
@@ -429,7 +492,7 @@ $('#l-discord').addEventListener('click',()=>{
     const avatarUrl=u.avatar
       ?`https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=128`
       :`https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id)>>22n)%6n}.png`;
-    await loginAs(u.global_name||u.username,u.id,avatarUrl);
+    await loginAs(u.global_name||u.username,u.id,avatarUrl,u.username);
     refreshPresence(); // Lanyard'dan gerçek aktiviteyi çek
   }catch(e){toast('Discord girişi başarısız oldu, tekrar dene.')}
 })();
@@ -461,8 +524,8 @@ function startPresencePolling(){
   window._presInt=setInterval(refreshPresence,30000);
 }
 
-const TUNA=n=>['tuna','tunaneymar_'].includes(n.toLowerCase());
-function isTuna(){return state.me&&TUNA(state.me.name)}
+const TUNA=n=>['tuna','tunaneymar_'].includes((n||'').toLowerCase());
+function isTuna(){return state.me&&(TUNA(state.me.name)||TUNA(state.me.discordUser))}
 function applyTuna(name){
   const on=TUNA(name);
   document.body.classList.toggle('tuna',on);
@@ -496,7 +559,12 @@ $('#me-chip').addEventListener('click',e=>{
   menu.style.cssText='position:absolute;top:calc(100% + 8px);right:0;padding:8px;min-width:160px;z-index:60';
   const b=document.createElement('button'); b.className='tab'; b.style.cssText='width:100%;text-align:left;color:var(--ink)';
   b.textContent='⎋ Çıkış yap';
-  b.addEventListener('click',()=>{ if(confirm('Çıkış yapmak istediğine emin misin, '+state.me.name+'?')) location.reload(); });
+  b.addEventListener('click',()=>{
+    if(confirm('Çıkış yapmak istediğine emin misin, '+state.me.name+'?')){
+      try{localStorage.removeItem('bro:session')}catch(e){}
+      location.reload();
+    }
+  });
   menu.appendChild(b);
   $('#me-chip').style.position='relative';
   $('#me-chip').appendChild(menu);
